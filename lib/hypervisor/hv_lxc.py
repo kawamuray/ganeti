@@ -349,9 +349,9 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if name is None:
       name = instance.name
 
-    timeout_cmd = []
+    stop_cmd = []
     if timeout is not None:
-      timeout_cmd.extend(["timeout", str(timeout)])
+      stop_cmd.extend(["timeout", str(timeout)])
 
     root_dir = self._InstanceDir(name)
     if not os.path.exists(root_dir):
@@ -365,7 +365,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
           raise HypervisorError("Running 'poweroff' on the instance"
                                 " failed: %s" % result.output)
       time.sleep(2)
-      result = utils.RunCmd(timeout_cmd.extend(["lxc-stop", "-n", name]))
+      stop_cmd.extend(["lxc-stop", "-n", name])
+      result = utils.RunCmd(stop_cmd)
       if result.failed:
         logging.warning("Error while doing lxc-stop for %s: %s", name,
                         result.output)
@@ -374,12 +375,14 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       return
 
     for mpath in self._GetMountSubdirs(root_dir):
-      result = utils.RunCmd(timeout_cmd.extend(["umount", mpath]))
+      stop_cmd.extend(["umount", mpath])
+      result = utils.RunCmd(stop_cmd)
       if result.failed:
         logging.warning("Error while umounting subpath %s for instance %s: %s",
                         mpath, name, result.output)
 
-    result = utils.RunCmd(timeout_cmd.extend(["umount", root_dir]))
+    stop_cmd.extend(["umount", root_dir])
+    result = utils.RunCmd(stop_cmd)
     if result.failed and force:
       msg = ("Processes still alive in the chroot: %s" %
              utils.RunCmd("fuser -vm %s" % root_dir).output)
