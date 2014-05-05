@@ -125,11 +125,16 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return '/sys/fs/cgroup'
 
   @classmethod
+  def _GetCgroupSubsystemMountPoint(cls, subsystem):
+    # TODO: consider more better way
+    return os.path.join(cls._GetCgroupMountPoint(), subsystem)
+
+  @classmethod
   def _GetCgroupCpuList(cls, instance_name):
     """Return the list of CPU ids for an instance.
 
     """
-    cgroup = cls._GetCgroupMountPoint()
+    cgroup = cls._GetCgroupSubsystemMountPoint('cpuset')
     try:
       cpus = utils.ReadFile(utils.PathJoin(cgroup, 'lxc',
                                            instance_name,
@@ -145,7 +150,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Return the memory limit for an instance
 
     """
-    cgroup = cls._GetCgroupMountPoint()
+    cgroup = cls._GetCgroupSubsystemMountPoint('memory')
     try:
       memory = int(utils.ReadFile(utils.PathJoin(cgroup, 'lxc',
                                                  instance_name,
@@ -251,7 +256,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     # Memory
     # Conditionally enable, memory resource controller might be disabled
-    cgroup = self._GetCgroupMountPoint()
+    cgroup = self._GetCgroupSubsystemMountPoint('memory')
     if os.path.exists(utils.PathJoin(cgroup, 'memory.limit_in_bytes')):
       out.append("lxc.cgroup.memory.limit_in_bytes = %dM" %
                  instance.beparams[constants.BE_MAXMEM])
