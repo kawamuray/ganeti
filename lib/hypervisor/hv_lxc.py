@@ -120,10 +120,9 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
   @classmethod
   def _GetCgroupMountPoint(cls):
-    for _, mountpoint, fstype, _ in utils.GetMounts():
-      if fstype == "cgroup":
-        return mountpoint
-    raise errors.HypervisorError("The cgroup filesystem is not mounted")
+    # TODO: the mount point of cgroup should be able to
+    #       specify as a hypervisor parameter.
+    return '/sys/fs/cgroup'
 
   @classmethod
   def _GetCgroupCpuList(cls, instance_name):
