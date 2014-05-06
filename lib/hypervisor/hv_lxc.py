@@ -362,8 +362,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if not retry and not force:
         result = utils.RunCmd(["chroot", root_dir, "poweroff"])
         if result.failed:
-          raise HypervisorError("Running 'poweroff' on the instance"
-                                " failed: %s" % result.output)
+          logging.warn("Running 'poweroff' on the instance failed: %s",
+                       result.output)
       time.sleep(2)
       stop_cmd.extend(["lxc-stop", "-n", name])
       result = utils.RunCmd(stop_cmd)
