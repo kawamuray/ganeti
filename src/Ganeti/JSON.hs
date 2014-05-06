@@ -61,7 +61,7 @@ module Ganeti.JSON
 
 import Control.DeepSeq
 import Control.Monad (liftM)
-import Control.Monad.Error.Class
+import "mtl" Control.Monad.Error.Class
 import qualified Data.Foldable as F
 import qualified Data.Traversable as F
 import Data.Maybe (fromMaybe, catMaybes)

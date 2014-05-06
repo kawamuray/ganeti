@@ -84,7 +84,7 @@ module Ganeti.Utils
 import Control.Concurrent
 import Control.Exception (try, bracket)
 import Control.Monad
-import Control.Monad.Error
+import "mtl" Control.Monad.Error
 import Data.Char (toUpper, isAlphaNum, isDigit, isSpace)
 import qualified Data.Either as E
 import Data.Function (on)

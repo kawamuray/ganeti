@@ -28,7 +28,7 @@ module Ganeti.Metad.WebServer (start) where
 
 import Control.Applicative
 import Control.Concurrent (MVar, readMVar)
-import Control.Monad.Error.Class (MonadError, catchError, throwError)
+import "mtl" Control.Monad.Error.Class (MonadError, catchError, throwError)
 import Control.Monad.IO.Class (liftIO)
 import qualified Control.Monad.CatchIO as CatchIO (catch)
 import Data.Map (Map)

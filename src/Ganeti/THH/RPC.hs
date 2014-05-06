@@ -36,7 +36,7 @@ module Ganeti.THH.RPC
 import Control.Applicative
 import Control.Arrow ((&&&))
 import Control.Monad
-import Control.Monad.Error.Class
+import "mtl" Control.Monad.Error.Class
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Language.Haskell.TH

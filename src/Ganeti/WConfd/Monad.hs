@@ -53,8 +53,8 @@ import Control.Applicative
 import Control.Arrow ((&&&), second)
 import Control.Monad
 import Control.Monad.Base
-import Control.Monad.Error
-import Control.Monad.Reader
+import "mtl" Control.Monad.Error
+import "mtl" Control.Monad.Reader
 import Control.Monad.Trans.Control
 import Data.IORef.Lifted
 import qualified Data.Set as S
