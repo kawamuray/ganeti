@@ -290,7 +290,7 @@ start() {
   @PKGLIBDIR@/ensure-dirs
 
   if type -p start-stop-daemon >/dev/null; then
-    start-stop-daemon --start --quiet --oknodo \
+    start-stop-daemon --start --quiet \
       --pidfile $pidfile \
       --startas $daemonexec \
       --chuid $usergroup \
@@ -319,7 +319,7 @@ stop() {
   if use_systemctl; then
     systemctl stop "${name}.service"
   elif type -p start-stop-daemon >/dev/null; then
-    start-stop-daemon --stop --quiet --oknodo --retry 30 \
+    start-stop-daemon --stop --quiet --retry 30 \
       --pidfile $pidfile
   else
     _ignore_error killproc -p $pidfile $name
@@ -408,7 +408,7 @@ rotate_logs() {
 
   if type -p start-stop-daemon >/dev/null; then
     start-stop-daemon --stop --signal HUP --quiet \
-      --oknodo --pidfile $pidfile
+      --pidfile $pidfile
   else
     _ignore_error killproc \
       -p $pidfile \
