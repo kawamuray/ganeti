@@ -297,7 +297,7 @@ start() {
     start-stop-daemon --start --quiet \
       --pidfile $pidfile \
       --exec $daemonexec \
-      --chuid $usergroup \
+      --user $usergroup \
       -- $args "$@"
   else
     # TODO: Find a way to start daemon with a group, until then the group must
