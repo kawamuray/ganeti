@@ -34,7 +34,7 @@ module Ganeti.WConfd.Server where
 import Control.Concurrent (forkIO)
 import Control.Exception
 import Control.Monad
-import Control.Monad.Error
+import "mtl" Control.Monad.Error
 import System.Directory (doesFileExist)
 
 import Ganeti.BasicTypes

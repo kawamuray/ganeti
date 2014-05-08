@@ -36,8 +36,8 @@ module Ganeti.THH.HsRPC
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Base
-import Control.Monad.Error
-import Control.Monad.Reader
+import "mtl" Control.Monad.Error
+import "mtl" Control.Monad.Reader
 import Language.Haskell.TH
 import qualified Text.JSON as J
 

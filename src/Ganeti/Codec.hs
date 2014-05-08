@@ -30,7 +30,7 @@ module Ganeti.Codec
 
 import Codec.Compression.Zlib (compress)
 import qualified Codec.Compression.Zlib.Internal as I
-import Control.Monad.Error
+import "mtl" Control.Monad.Error
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Internal as BL
 import Data.Monoid (mempty)

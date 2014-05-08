@@ -39,8 +39,8 @@ module Ganeti.WConfd.ConfigWriter
 
 import Control.Applicative
 import Control.Monad.Base
-import Control.Monad.Error
-import qualified Control.Monad.State.Strict as S
+import "mtl" Control.Monad.Error
+import qualified "mtl" Control.Monad.State.Strict as S
 import Control.Monad.Trans.Control
 
 import Ganeti.BasicTypes
