@@ -31,7 +31,7 @@ module Ganeti.Utils.Livelock
 
 import qualified Control.Exception as E
 import Control.Monad
-import "mtl" Control.Monad.Error
+import Control.Monad.Error
 import System.Directory (doesFileExist)
 import System.IO
 import System.Posix.IO

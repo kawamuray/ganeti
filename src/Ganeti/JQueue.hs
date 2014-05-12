@@ -79,7 +79,7 @@ import Control.Exception
 import Control.Lens (over)
 import Control.Monad
 import Control.Monad.IO.Class
-import "mtl" Control.Monad.Trans (lift)
+import Control.Monad.Trans (lift)
 import Control.Monad.Trans.Maybe
 import Data.Functor ((<$), (<$>))
 import Data.List

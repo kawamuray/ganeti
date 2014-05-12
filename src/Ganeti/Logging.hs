@@ -52,10 +52,10 @@ module Ganeti.Logging
 
 import Control.Applicative ((<$>))
 import Control.Monad
-import "mtl" Control.Monad.Error (Error(..), MonadError(..), catchError)
-import "mtl" Control.Monad.Reader
-import qualified "mtl" Control.Monad.RWS.Strict as RWSS
-import qualified "mtl" Control.Monad.State.Strict as SS
+import Control.Monad.Error (Error(..), MonadError(..), catchError)
+import Control.Monad.Reader
+import qualified Control.Monad.RWS.Strict as RWSS
+import qualified Control.Monad.State.Strict as SS
 import Control.Monad.Trans.Identity
 import Control.Monad.Trans.Maybe
 import Data.Monoid

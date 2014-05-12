@@ -40,7 +40,7 @@ module Ganeti.Locking.Locks
 import Control.Applicative ((<$>), (<*>), pure)
 import Control.Monad ((>=>), liftM)
 import Control.Monad.Base (MonadBase, liftBase)
-import "mtl" Control.Monad.Error (MonadError, catchError)
+import Control.Monad.Error (MonadError, catchError)
 import Data.List (stripPrefix)
 import System.Posix.Types (ProcessID)
 import qualified Text.JSON as J

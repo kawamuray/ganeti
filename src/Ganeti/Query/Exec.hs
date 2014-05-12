@@ -54,7 +54,7 @@ module Ganeti.Query.Exec
 import Control.Concurrent
 import Control.Exception.Lifted (onException)
 import Control.Monad
-import "mtl" Control.Monad.Error
+import Control.Monad.Error
 import Control.Monad.Trans.Maybe ()
 import Data.Functor
 import qualified Data.Map as M

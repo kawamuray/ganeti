@@ -60,7 +60,7 @@ import Control.Arrow ((&&&))
 import Control.DeepSeq
 import Control.Monad (filterM, foldM, liftM, unless)
 import Control.Monad.IO.Class
-import "mtl" Control.Monad.Trans (lift)
+import Control.Monad.Trans (lift)
 import qualified Data.Foldable as Foldable
 import Data.List (intercalate, nub, find)
 import Data.Maybe (fromMaybe)

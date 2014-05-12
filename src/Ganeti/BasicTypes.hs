@@ -66,8 +66,8 @@ import Control.Applicative
 import Control.Exception (try)
 import Control.Monad
 import Control.Monad.Base
-import "mtl" Control.Monad.Error.Class
-import "mtl" Control.Monad.Trans
+import Control.Monad.Error.Class
+import Control.Monad.Trans
 import Control.Monad.Trans.Control
 import Data.Function
 import Data.List

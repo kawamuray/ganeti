@@ -691,7 +691,6 @@ HFLAGS = \
 	-O -Wall -Werror -isrc \
 	-fwarn-monomorphism-restriction \
 	-fwarn-tabs \
-	-XPackageImports \
 	$(GHC_BYVERSION_FLAGS)
 
 if HPROFILE
