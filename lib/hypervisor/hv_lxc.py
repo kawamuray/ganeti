@@ -53,6 +53,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
   """
   _ROOT_DIR = pathutils.RUN_DIR + "/lxc"
+  _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
   _DEVS = [
     "c 1:3",   # /dev/null
     "c 1:5",   # /dev/zero
@@ -118,23 +119,52 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".log")
 
+  def _MountCgroupSubsystem(self, subsystem):
+    """Mount cgroup subsystem fs under the cgruop_root
+
+    """
+    cgroup_root = self._GetCgroupMountPoint()
+    if not os.path.isdir(cgroup_root):
+      os.mkdir(cgroup_root)
+
+    subsys_dir = utils.PathJoin(cgroup_root, subsystem)
+    if os.path.isdir(subsys_dir):
+      # Check if cgroup subsystem is already mounted at this point
+      if os.path.ismount(subsys_dir) and \
+         any(x[1] == subsys_dir and x[2] == 'cgroup' and subsystem in x[3].split(',')
+             for x in utils.GetMounts()):
+        return subsys_dir
+    else:
+      os.mkdir(subsys_dir) # TODO should be makedirs?
+
+    mount_cmd = ['mount', '-t', 'cgroup', '-o', subsystem, subsystem, subsys_dir]
+    result = utils.RunCmd(mount_cmd)
+    if result.failed:
+      raise HypervisorError("Running %s failed: %s" % (' '.join(mount_cmd), result.output))
+
+    return subsys_dir
+
+  def CleanupCgroupMounts(self):
+    for subsys_dir in self._GetMountSubdirs(self._GetCgroupMountPoint()):
+      umount_cmd = ['umount', subsys_dir]
+      result = utils.RunCmd(umount_cmd)
+      if result.failed:
+        logging.warn("Running %s failed: %s", umount_cmd, result.output)
+
   @classmethod
   def _GetCgroupMountPoint(cls):
-    # TODO: the mount point of cgroup should be able to
-    #       specify as a hypervisor parameter.
-    return '/sys/fs/cgroup'
+    return cls._CGROUP_ROOT_DIR
 
   @classmethod
   def _GetCgroupSubsystemMountPoint(cls, subsystem):
     # TODO: consider more better way
     return os.path.join(cls._GetCgroupMountPoint(), subsystem)
 
-  @classmethod
-  def _GetCgroupCpuList(cls, instance_name):
+  def _GetCgroupCpuList(self, instance_name):
     """Return the list of CPU ids for an instance.
 
     """
-    cgroup = cls._GetCgroupSubsystemMountPoint('cpuset')
+    cgroup = self._MountCgroupSubsystem('cpuset')
     try:
       cpus = utils.ReadFile(utils.PathJoin(cgroup, 'lxc',
                                            instance_name,
@@ -145,12 +175,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     return utils.ParseCpuMask(cpus)
 
-  @classmethod
-  def _GetCgroupMemoryLimit(cls, instance_name):
+  def _GetCgroupMemoryLimit(self, instance_name):
     """Return the memory limit for an instance
 
     """
-    cgroup = cls._GetCgroupSubsystemMountPoint('memory')
+    cgroup = self._MountCgroupSubsystem('memory')
     try:
       memory = int(utils.ReadFile(utils.PathJoin(cgroup, 'lxc',
                                                  instance_name,
@@ -256,7 +285,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     # Memory
     # Conditionally enable, memory resource controller might be disabled
-    cgroup = self._GetCgroupSubsystemMountPoint('memory')
+    cgroup = self._MountCgroupSubsystem('memory')
     if os.path.exists(utils.PathJoin(cgroup, 'memory.limit_in_bytes')):
       out.append("lxc.cgroup.memory.limit_in_bytes = %dM" %
                  instance.beparams[constants.BE_MAXMEM])

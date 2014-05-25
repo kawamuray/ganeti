@@ -237,6 +237,12 @@ class LUClusterDestroy(LogicalUnit):
     result = self.rpc.call_node_deactivate_master_ip(master_params.uuid,
                                                      master_params, ems)
     result.Warn("Error disabling the master IP address", self.LogWarning)
+
+    # Unmount cgroup fs if mounted
+    # TODO if lxc was enabled
+    from ganeti.hypervisor.hv_lxc import LXCHypervisor
+    LXCHypervisor.CleanupCgroupMounts()
+
     return master_params.uuid
 
 
