@@ -422,12 +422,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   def RebootInstance(self, instance):
     """Reboot an instance.
 
-    This is not (yet) implemented (in Ganeti) for the LXC hypervisor.
-
     """
-    # TODO: implement reboot
-    raise HypervisorError("The LXC hypervisor doesn't implement the"
-                          " reboot functionality")
+    self.StopInstance(instance, retry=True, force=True)
+    from ganeti import backend
+    # TODO touching private method
+    block_devices = backend._GatherAndLinkBlockDevs(instance)
+    self.StartInstance(instance, block_devices, None)
 
   def BalloonInstanceMemory(self, instance, mem):
     """Balloon an instance memory to a certain value.
