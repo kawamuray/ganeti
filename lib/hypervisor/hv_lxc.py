@@ -80,9 +80,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
     }
 
-  def __init__(self):
+  def __init__(self, _run_cmd_fn=None):
     hv_base.BaseHypervisor.__init__(self)
     utils.EnsureDirs([(self._ROOT_DIR, self._DIR_MODE)])
+
+    self._run_cmd_fn = self._run_cmd_fn if _run_cmd_fn is None else _run_cmd_fn
 
   @staticmethod
   def _GetMountSubdirs(path):
@@ -138,7 +140,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       os.mkdir(subsys_dir) # TODO should be makedirs?
 
     mount_cmd = ['mount', '-t', 'cgroup', '-o', subsystem, subsystem, subsys_dir]
-    result = utils.RunCmd(mount_cmd)
+    result = self._run_cmd_fn(mount_cmd)
     if result.failed:
       raise HypervisorError("Running %s failed: %s" % (' '.join(mount_cmd), result.output))
 
@@ -151,14 +153,33 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if result.failed:
         logging.warn("Running %s failed: %s", umount_cmd, result.output)
 
+  def CleanupInstance(self, instance_name):
+    root_dir = self._InstanceDir(name)
+    if os.path.ismount(root_dir):
+      for mpath in self._GetMountSubdirs(root_dir):
+        umount_cmd = ["umount", mpath]
+        result = self._run_cmd_fn(umount_cmd)
+        if result.failed:
+          logging.warning("Error while umounting subpath %s for instance %s: %s",
+                          mpath, name, result.output)
+
+      umount_cmd = ["umount", root_dir]
+      result = self._run_cmd_fn(umount_cmd)
+      if result.failed:
+        msg = ("Processes still alive in the chroot: %s" %
+               self._run_cmd_fn("fuser -vm %s" % root_dir).output)
+        logging.error(msg)
+        raise HypervisorError("Unmounting the chroot dir failed: %s (%s)" %
+                              (result.output, msg))
+
   @classmethod
   def _GetCgroupMountPoint(cls):
     return cls._CGROUP_ROOT_DIR
 
-  @classmethod
-  def _GetCgroupSubsystemMountPoint(cls, subsystem):
-    # TODO: consider more better way
-    return os.path.join(cls._GetCgroupMountPoint(), subsystem)
+  def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
+    subsys_dir = self._MountCgroupSubsystem(subsystem)
+    param_file = utils.PathJoin(subsys_dir, 'lxc', instance_name, param)
+    return utils.ReadFile(param_file)
 
   def _GetCgroupCpuList(self, instance_name):
     """Return the list of CPU ids for an instance.
@@ -166,29 +187,28 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     cgroup = self._MountCgroupSubsystem('cpuset')
     try:
-      cpus = utils.ReadFile(utils.PathJoin(cgroup, 'lxc',
-                                           instance_name,
-                                           "cpuset.cpus"))
+      cpumask = self._GetCgroupInstanceValue(instance_name,
+                                             'cpuset', 'cpuset.cpus')
     except EnvironmentError, err:
       raise errors.HypervisorError("Getting CPU list for instance"
                                    " %s failed: %s" % (instance_name, err))
 
-    return utils.ParseCpuMask(cpus)
+    return utils.ParseCpuMask(cpumask)
 
   def _GetCgroupMemoryLimit(self, instance_name):
     """Return the memory limit for an instance
 
     """
-    cgroup = self._MountCgroupSubsystem('memory')
     try:
-      memory = int(utils.ReadFile(utils.PathJoin(cgroup, 'lxc',
-                                                 instance_name,
-                                                 "memory.limit_in_bytes")))
+      mem_limit = self._GetCgroupInstanceValue(instance_name,
+                                               'memory',
+                                               'memory.limit_in_bytes')
+      mem_limit = int(mem_limit)
     except EnvironmentError:
       # memory resource controller may be disabled, ignore
-      memory = 0
+      mem_limit = 0
 
-    return memory
+    return mem_limit
 
   def ListInstances(self, hvparams=None):
     """Get the list of running instances.
@@ -209,7 +229,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     # TODO: read container info from the cgroup mountpoint
 
-    result = utils.RunCmd(["lxc-info", "-s", "-n", instance_name])
+    result = self._run_cmd_fn(["lxc-info", "-s", "-n", instance_name])
     if result.failed:
       raise errors.HypervisorError("Running lxc-info failed: %s" %
                                    result.output)
@@ -389,45 +409,23 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if name in self.ListInstances():
       # Signal init to shutdown; this is a hack
       if not retry and not force:
-        result = utils.RunCmd(["chroot", root_dir, "poweroff"])
+        result = self._run_cmd_fn(["chroot", root_dir, "poweroff"])
         if result.failed:
           logging.warn("Running 'poweroff' on the instance failed: %s",
                        result.output)
       time.sleep(2)
       stop_cmd.extend(["lxc-stop", "-n", name])
-      result = utils.RunCmd(stop_cmd)
+      result = self._run_cmd_fn(stop_cmd)
       if result.failed:
         logging.warning("Error while doing lxc-stop for %s: %s", name,
                         result.output)
 
-    if not os.path.ismount(root_dir):
-      return
-
-    for mpath in self._GetMountSubdirs(root_dir):
-      stop_cmd.extend(["umount", mpath])
-      result = utils.RunCmd(stop_cmd)
-      if result.failed:
-        logging.warning("Error while umounting subpath %s for instance %s: %s",
-                        mpath, name, result.output)
-
-    stop_cmd.extend(["umount", root_dir])
-    result = utils.RunCmd(stop_cmd)
-    if result.failed and force:
-      msg = ("Processes still alive in the chroot: %s" %
-             utils.RunCmd("fuser -vm %s" % root_dir).output)
-      logging.error(msg)
-      raise HypervisorError("Unmounting the chroot dir failed: %s (%s)" %
-                            (result.output, msg))
-
   def RebootInstance(self, instance):
     """Reboot an instance.
 
-    This is not (yet) implemented (in Ganeti) for the LXC hypervisor.
-
     """
-    # TODO: implement reboot
-    raise HypervisorError("The LXC hypervisor doesn't implement the"
-                          " reboot functionality")
+    self.StopInstance(instance, retry=True, force=True)
+    self.StartInstance(instance, None, None)
 
   def BalloonInstanceMemory(self, instance, mem):
     """Balloon an instance memory to a certain value.
