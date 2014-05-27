@@ -176,11 +176,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   def _GetCgroupMountPoint(cls):
     return cls._CGROUP_ROOT_DIR
 
-  @classmethod
-  def _GetCgroupSubsystemMountPoint(cls, subsystem):
-    # TODO: consider more better way
-    return os.path.join(cls._GetCgroupMountPoint(), subsystem)
-
   def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
     subsys_dir = self._MountCgroupSubsystem(subsystem)
     param_file = utils.PathJoin(subsys_dir, 'lxc', instance_name, param)
