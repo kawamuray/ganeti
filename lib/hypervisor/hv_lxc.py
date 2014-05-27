@@ -153,6 +153,25 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if result.failed:
         logging.warn("Running %s failed: %s", umount_cmd, result.output)
 
+  def CleanupInstance(self, instance_name):
+    root_dir = self._InstanceDir(name)
+    if os.path.ismount(root_dir):
+      for mpath in self._GetMountSubdirs(root_dir):
+        umount_cmd = ["umount", mpath]
+        result = self._run_cmd_fn(umount_cmd)
+        if result.failed:
+          logging.warning("Error while umounting subpath %s for instance %s: %s",
+                          mpath, name, result.output)
+
+      umount_cmd = ["umount", root_dir]
+      result = self._run_cmd_fn(umount_cmd)
+      if result.failed:
+        msg = ("Processes still alive in the chroot: %s" %
+               self._run_cmd_fn("fuser -vm %s" % root_dir).output)
+        logging.error(msg)
+        raise HypervisorError("Unmounting the chroot dir failed: %s (%s)" %
+                              (result.output, msg))
+
   @classmethod
   def _GetCgroupMountPoint(cls):
     return cls._CGROUP_ROOT_DIR
@@ -405,25 +424,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if result.failed:
         logging.warning("Error while doing lxc-stop for %s: %s", name,
                         result.output)
-
-    if not os.path.ismount(root_dir):
-      return
-
-    for mpath in self._GetMountSubdirs(root_dir):
-      stop_cmd.extend(["umount", mpath])
-      result = utils.RunCmd(stop_cmd)
-      if result.failed:
-        logging.warning("Error while umounting subpath %s for instance %s: %s",
-                        mpath, name, result.output)
-
-    stop_cmd.extend(["umount", root_dir])
-    result = utils.RunCmd(stop_cmd)
-    if result.failed and force:
-      msg = ("Processes still alive in the chroot: %s" %
-             utils.RunCmd("fuser -vm %s" % root_dir).output)
-      logging.error(msg)
-      raise HypervisorError("Unmounting the chroot dir failed: %s (%s)" %
-                            (result.output, msg))
 
   def RebootInstance(self, instance):
     """Reboot an instance.
