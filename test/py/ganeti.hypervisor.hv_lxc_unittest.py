@@ -26,8 +26,11 @@ import unittest
 from ganeti import constants
 from ganeti import objects
 from ganeti import hypervisor
+from ganeti import pathutils
+from ganeti import utils
 
 from ganeti.hypervisor import hv_lxc
+from ganeti.hypervisor.hv_lxc import LXCHypervisor
 
 import mock
 import testutils
@@ -58,11 +61,12 @@ class TestConsole(unittest.TestCase):
 
 class TestLXCHypervisorCgroupMount(unittest.TestCase):
   def test(self):
+    hv = LXCHypervisor()
     cgroup_root = pathutils.RUN_DIR + "/lxc/cgroup"
-    self.assertEqual(LXCHypervisor._GetCgroupMountPoint(),
+    self.assertEqual(hv._GetCgroupMountPoint(),
                      cgroup_root)
     cpuset_subdir = cgroup_root + "/cpuset"
-    self.assertEqual(LXCHypervisor._MountCgroupSubsystem('cpuset'),
+    self.assertEqual(hv._MountCgroupSubsystem('cpuset'),
                      cpuset_subdir)
     self.assertTrue(os.path.ismount(cpuset_subdir))
     self.assertIn(('cpuset', cpuset_subdir, 'cgroup'),
@@ -70,14 +74,14 @@ class TestLXCHypervisorCgroupMount(unittest.TestCase):
 
 class TestLXCHypervisorGetInstanceInfo(unittest.TestCase):
   def setUp(self):
-    self.orig__GetCgroupCpuList = hv_lxc._GetCgroupCpuList
-    hv_lxc._GetCgroupCpuList = mock.Mock(return_value=[1])
-    self.orig__GetCgroupMemoryLimit = hv_lxc._GetCgroupMemoryLimit
-    hv_lxc._GetCgroupMemoryLimit = mock.Mock(return_value=128*(1024 ** 2))
+    self.orig__GetCgroupCpuList = hv_lxc.LXCHypervisor._GetCgroupCpuList
+    hv_lxc.LXCHypervisor._GetCgroupCpuList = mock.Mock(return_value=[1])
+    self.orig__GetCgroupMemoryLimit = hv_lxc.LXCHypervisor._GetCgroupMemoryLimit
+    hv_lxc.LXCHypervisor._GetCgroupMemoryLimit = mock.Mock(return_value=128*(1024 ** 2))
 
   def tearDown(self):
-    hv_lxc._GetCgroupCpuList = self.orig__GetCgroupCpuList
-    hv_lxc._GetCgroupMemoryLimit = self.orig__GetCgroupMemoryLimit
+    hv_lxc.LXCHypervisor._GetCgroupCpuList = self.orig__GetCgroupCpuList
+    hv_lxc.LXCHypervisor._GetCgroupMemoryLimit = self.orig__GetCgroupMemoryLimit
 
   def testRunningInstance(self):
     hv = hv_lxc.LXCHypervisor(run_cmd_fn=RunCmdMock({
@@ -92,9 +96,29 @@ class TestLXCHypervisorGetInstanceInfo(unittest.TestCase):
     }))
     self.assertIsNone(hv.GetInstanceInfo('foo'))
 
-# class TestLXCHypervisorGetCgroupCpuList(unittest.TestCase):
-#   def test(self):
 
+
+class TestLXCHypervisorGetCgroupCpuList(unittest.TestCase):
+  def setUp(self):
+    self.orig_ReadFile = utils.ReadFile
+    utils.ReadFile = mock.Mock(return_value=testutils.ReadTestData('cgroup-cpuset.cpus.txt'))
+
+  def tearDown(self):
+    utils.ReadFile = self.orig_ReadFile
+
+  def test(self):
+    pass # TODO
+
+class TestLXCHypervisorGetCgroupCpuList(unittest.TestCase):
+  def setUp(self):
+    self.orig_ReadFile = utils.ReadFile
+    utils.ReadFile = mock.Mock(return_value=testutils.ReadTestData('cgroup-cpuset.txt'))
+
+  def tearDown(self):
+    utils.ReadFile = self.orig_ReadFile
+
+  def test(self):
+    pass
 
 if __name__ == "__main__":
   testutils.GanetiTestProgram()
