@@ -80,9 +80,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
     }
 
-  def __init__(self):
+  def __init__(self, _run_cmd_fn=None):
     hv_base.BaseHypervisor.__init__(self)
     utils.EnsureDirs([(self._ROOT_DIR, self._DIR_MODE)])
+
+    self._run_cmd_fn = self._run_cmd_fn if _run_cmd_fn is None else _run_cmd_fn
 
   @staticmethod
   def _GetMountSubdirs(path):
@@ -138,7 +140,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       os.mkdir(subsys_dir) # TODO should be makedirs?
 
     mount_cmd = ['mount', '-t', 'cgroup', '-o', subsystem, subsystem, subsys_dir]
-    result = utils.RunCmd(mount_cmd)
+    result = self._run_cmd_fn(mount_cmd)
     if result.failed:
       raise HypervisorError("Running %s failed: %s" % (' '.join(mount_cmd), result.output))
 
@@ -209,7 +211,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     # TODO: read container info from the cgroup mountpoint
 
-    result = utils.RunCmd(["lxc-info", "-s", "-n", instance_name])
+    result = self._run_cmd_fn(["lxc-info", "-s", "-n", instance_name])
     if result.failed:
       raise errors.HypervisorError("Running lxc-info failed: %s" %
                                    result.output)
@@ -389,13 +391,13 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if name in self.ListInstances():
       # Signal init to shutdown; this is a hack
       if not retry and not force:
-        result = utils.RunCmd(["chroot", root_dir, "poweroff"])
+        result = self._run_cmd_fn(["chroot", root_dir, "poweroff"])
         if result.failed:
           logging.warn("Running 'poweroff' on the instance failed: %s",
                        result.output)
       time.sleep(2)
       stop_cmd.extend(["lxc-stop", "-n", name])
-      result = utils.RunCmd(stop_cmd)
+      result = self._run_cmd_fn(stop_cmd)
       if result.failed:
         logging.warning("Error while doing lxc-stop for %s: %s", name,
                         result.output)
