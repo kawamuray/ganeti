@@ -430,10 +430,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     self.StopInstance(instance, retry=True, force=True)
-    from ganeti import backend
-    # TODO touching private method
-    block_devices = backend._GatherAndLinkBlockDevs(instance)
-    self.StartInstance(instance, block_devices, None)
+    self.StartInstance(instance, None, None)
 
   def BalloonInstanceMemory(self, instance, mem):
     """Balloon an instance memory to a certain value.
