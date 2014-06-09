@@ -84,7 +84,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     hv_base.BaseHypervisor.__init__(self)
     utils.EnsureDirs([(self._ROOT_DIR, self._DIR_MODE)])
 
-    self._run_cmd_fn = self._run_cmd_fn if _run_cmd_fn is None else _run_cmd_fn
+    self._run_cmd_fn = utils.RunCmd if _run_cmd_fn is None else _run_cmd_fn
 
   @staticmethod
   def _GetMountSubdirs(path):
