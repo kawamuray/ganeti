@@ -347,7 +347,12 @@ getFQDN' = do
   let address = listToMaybe addrInfos >>= (Just . Socket.addrAddress)
   case address of
     Just a -> do
-      fqdn <- liftM fst $ Socket.getNameInfo [] True False a
+      let ioErrorToNothing :: IOError -> IO (Maybe Socket.HostName)
+          ioErrorToNothing _ = return Nothing
+      fqdn <- Control.Exception.catch
+                (liftM fst $
+                 Socket.getNameInfo [Socket.NI_NAMEREQD] True False a)
+                ioErrorToNothing
       return (fromMaybe hostname fqdn)
     Nothing -> return hostname
 
