@@ -131,16 +131,16 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if os.path.isdir(subsys_dir):
       # Check if cgroup subsystem is already mounted at this point
       if os.path.ismount(subsys_dir) and \
-         any(x[1] == subsys_dir and x[2] == 'cgroup' and subsystem in x[3].split(',')
+         any(x[1] == subsys_dir and x[2] == "cgroup" and subsystem in x[3].split(",")
              for x in utils.GetMounts()):
         return subsys_dir
     else:
       os.makedirs(subsys_dir)
 
-    mount_cmd = ['mount', '-t', 'cgroup', '-o', subsystem, subsystem, subsys_dir]
+    mount_cmd = ["mount", "-t", "cgroup", "-o", subsystem, subsystem, subsys_dir]
     result = self._run_cmd_fn(mount_cmd)
     if result.failed:
-      raise HypervisorError("Running %s failed: %s" % (' '.join(mount_cmd), result.output))
+      raise HypervisorError("Running %s failed: %s" % (" ".join(mount_cmd), result.output))
 
     return subsys_dir
 
@@ -192,17 +192,17 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
   def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
     subsys_dir = self._MountCgroupSubsystem(subsystem)
-    param_file = utils.PathJoin(subsys_dir, 'lxc', instance_name, param)
+    param_file = utils.PathJoin(subsys_dir, "lxc", instance_name, param)
     return utils.ReadFile(param_file)
 
   def _GetCgroupCpuList(self, instance_name):
     """Return the list of CPU ids for an instance.
 
     """
-    cgroup = self._MountCgroupSubsystem('cpuset')
+    cgroup = self._MountCgroupSubsystem("cpuset")
     try:
       cpumask = self._GetCgroupInstanceValue(instance_name,
-                                             'cpuset', 'cpuset.cpus')
+                                             "cpuset", "cpuset.cpus")
     except EnvironmentError, err:
       raise errors.HypervisorError("Getting CPU list for instance"
                                    " %s failed: %s" % (instance_name, err))
@@ -215,8 +215,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     try:
       mem_limit = self._GetCgroupInstanceValue(instance_name,
-                                               'memory',
-                                               'memory.limit_in_bytes')
+                                               "memory",
+                                               "memory.limit_in_bytes")
       mem_limit = int(mem_limit)
     except EnvironmentError:
       # memory resource controller may be disabled, ignore
@@ -325,12 +325,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     # Memory
     # Conditionally enable, memory resource controller might be disabled
-    cgroup = self._MountCgroupSubsystem('memory')
-    if os.path.exists(utils.PathJoin(cgroup, 'memory.limit_in_bytes')):
+    cgroup = self._MountCgroupSubsystem("memory")
+    if os.path.exists(utils.PathJoin(cgroup, "memory.limit_in_bytes")):
       out.append("lxc.cgroup.memory.limit_in_bytes = %dM" %
                  instance.beparams[constants.BE_MAXMEM])
 
-    if os.path.exists(utils.PathJoin(cgroup, 'memory.memsw.limit_in_bytes')):
+    if os.path.exists(utils.PathJoin(cgroup, "memory.memsw.limit_in_bytes")):
       out.append("lxc.cgroup.memory.memsw.limit_in_bytes = %dM" %
                  instance.beparams[constants.BE_MAXMEM])
 
@@ -373,8 +373,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     try:
       utils.WriteFile(stash_file, data=serialized)
     except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s"
-                            % (stash_file, err))
+      raise HypervisorError("Failed to save instance stash file %s : %s" %
+                            (stash_file, err))
 
   def _LoadInstanceStash(self, instance_name):
     """Load stashed informations in file which was created by
@@ -387,8 +387,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         return serializer.Load(utils.ReadFile(stash_file))
       # TODO handle JSONDecodeError too?
       except EnvironmentError, err:
-        raise HypervisorError("Failed to load instance stash file %s : %s"
-                              % (stash_file, err))
+        raise HypervisorError("Failed to load instance stash file %s : %s" %
+                              (stash_file, err))
     else:
       return None
 
@@ -396,8 +396,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     try:
       utils.WriteFile(stash_file, data=serialized)
     except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s"
-                            % (stash_file, err))
+      raise HypervisorError("Failed to save instance stash file %s : %s" %
+                            (stash_file, err))
 
   def _PrepareFileStorageForMount(self, storage_path):
     try:
