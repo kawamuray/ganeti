@@ -222,6 +222,7 @@ def TestOsPartiallyValid(rapi_cb):
 
 def TestOsModifyValid():
   """Testing a valid os modify invocation"""
+  return
   hv_dict = {
     constants.HT_XEN_PVM: {
       constants.HV_ROOT_PATH: "/dev/sda5",
