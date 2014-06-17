@@ -151,24 +151,40 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if result.failed:
         logging.warn("Running %s failed: %s", umount_cmd, result.output)
 
-  def CleanupInstance(self, instance_name):
-    root_dir = self._InstanceDir(name)
-    if os.path.ismount(root_dir):
-      for mpath in self._GetMountSubdirs(root_dir):
-        umount_cmd = ["umount", mpath]
-        result = self._run_cmd_fn(umount_cmd)
-        if result.failed:
-          logging.warning("Error while umounting subpath %s for instance %s: %s",
-                          mpath, name, result.output)
+  def _UnmountDir(self, path, recurse=False):
+    if recurse:
+      for subdir in self._GetMountSubdirs(path):
+        self._UnmountDir(subdir, recurse=recurse)
 
-      umount_cmd = ["umount", root_dir]
-      result = self._run_cmd_fn(umount_cmd)
-      if result.failed:
-        msg = ("Processes still alive in the chroot: %s" %
+    umount_cmd = ["umount", path]
+    result = self._run_cmd_fn(umount_cmd)
+    if result.failed:
+      raise errors.CommandError("Running %s failed : %s" %
+                                (umount_cmd, result.output))
+
+  def _UnmountInstanceDir(self, instance_name):
+    root_dir = self._InstanceDir(instance_name)
+    if os.path.ismount(root_dir):
+      try:
+        self._UnmountDir(root_dir, recurse=True)
+      except errors.CommandError:
+        msg = ("Processes still alive inside the container: %s" %
                self._run_cmd_fn("fuser -vm %s" % root_dir).output)
         logging.error(msg)
-        raise HypervisorError("Unmounting the chroot dir failed: %s (%s)" %
-                              (result.output, msg))
+        raise HypervisorError("Unmounting the instance root dir failed"
+                              " : %s (%s)" % (result.output, msg))
+
+  def CleanupInstance(self, instance_name, stash=None):
+    self._UnmountInstanceDir(instance_name)
+    try:
+      if stash is None:
+        stash = self._LoadInstanceStash(instance_name)
+      if stash is not None and "loopback-device" in stash:
+        utils.ReleaseDiskImageDeviceMapper(stash["loopback-device"])
+    except Exception, err:
+      logging.warn("Failed to cleanup partition mapping : %s", err)
+
+    utils.RemoveFile(self._InstanceStashFile(instance_name))
 
   @classmethod
   def _GetCgroupMountPoint(cls):
@@ -383,6 +399,16 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise HypervisorError("Failed to save instance stash file %s : %s"
                             % (stash_file, err))
 
+  def _PrepareFileStorageForMount(self, storage_path):
+    try:
+      (loop_dev, partition_devs) = \
+        utils.CreateDiskImageDeviceMapper(storage_path)
+    except errors.CommandError, err:
+      raise HypervisorError("Failed to create partition mapping for %s"
+                            " : %s" % (storage_path, err))
+
+    return (loop_dev, partition_devs[0])
+
   def StartInstance(self, instance, block_devices, startup_paused):
     """Start an instance.
 
@@ -390,6 +416,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     We use volatile containers.
 
     """
+    stash = {}
     root_dir = self._InstanceDir(instance.name)
     try:
       utils.EnsureDirs([(root_dir, self._DIR_MODE)])
@@ -412,18 +439,44 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if not block_devices:
         raise HypervisorError("LXC needs at least one disk")
 
-      sda_dev_path = block_devices[0][1]
-      result = utils.RunCmd(["mount", sda_dev_path, root_dir])
-      if result.failed:
-        raise HypervisorError("Mounting the root dir of LXC instance %s"
-                              " failed: %s" % (instance.name, result.output))
-    result = utils.RunCmd(["lxc-start", "-n", instance.name,
-                           "-o", log_file,
-                           "-l", "DEBUG",
-                           "-f", conf_file, "-d"])
-    if result.failed:
-      raise HypervisorError("Running the lxc-start script failed: %s" %
-                            result.output)
+      sda_disk, sda_dev_path = block_devices[0][0:1]
+      if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
+        # LXC needs to use device-mapper to access each partition of disk image
+        (loop_dev, root_partition) = \
+          self._PrepareFileStorageForMount(sda_dev_path)
+        stash["loopback-device"] = loop_dev
+        sda_dev_path = root_partition
+
+      try:
+        logging.info("Mounting rootfs %s", sda_dev_path)
+        result = self._run_cmd_fn(["mount", sda_dev_path, root_dir])
+        if result.failed:
+          raise HypervisorError("Mounting the root dir of LXC instance %s"
+                                " failed: %s" % (instance.name, result.output))
+
+        logging.info("Running lxc-start")
+        result = self._run_cmd_fn(["lxc-start",
+                                   "-n", instance.name,
+                                   "-o", log_file,
+                                   "-l", "DEBUG",
+                                   "-f", conf_file,
+                                   "-d"])
+        if result.failed:
+          raise HypervisorError("Running the lxc-start failed: %s" %
+                                result.output)
+
+        # Ensure that the instance is running correctly after daemonized
+        if not self.GetInstanceInfo(instance.name):
+          raise HypervisorError("Failed to start instance %s :"
+                                " lxc process exitted after daemonized" %
+                                instance.name)
+
+      except Exception, err:
+        logging.warn(err)
+        self.CleanupInstance(instance.name, stash=stash)
+        raise err
+
+    self._SaveInstanceStash(instance.name, stash)
 
   def StopInstance(self, instance, force=False, retry=False, name=None,
                    timeout=None):
