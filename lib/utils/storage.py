@@ -196,7 +196,7 @@ def CreateDiskImageDeviceMapper(image_path):
     raise errors.CommandError("Failed to add partition mapping (%s) : %s" %
                               (kpartx_cmd, result.output))
   else:
-    dm_devs = [l.split(" ") for l in result.stdout.split("\n")]
+    dm_devs = [l.split(" ") for l in result.stdout.split("\n") if l]
     loop_dev = dm_devs[0][7]
     # all entries must be the same
     assert(all(x[7] == loop_dev for x in dm_devs))
