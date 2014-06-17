@@ -25,7 +25,9 @@
 import logging
 
 from ganeti import constants
-
+from ganeti import errors
+from ganeti.utils import io as utils_io
+from ganeti.utils import process as utils_process
 
 def GetDiskTemplatesOfStorageTypes(*storage_types):
   """Given the storage type, returns a list of disk templates based on that
@@ -206,3 +208,49 @@ def GetDiskLabels(prefix, num_disks, start=0):
 
   for i in range(start, num_disks):
     yield prefix + _GetDiskSuffix(i)
+
+def CreateDiskImageDeviceMapper(image_path):
+  """Create dm device for each partition of disk image
+
+  This operation will allocate a loopback and device-mapper device to map
+  partitions.
+  You must call L{ReleaseDiskImageDeviceMapper} to clean up allocated resources
+  by this function call.
+
+  @type image_path: string
+  @param image_path: path of multi-partition disk image
+  @rtype: tuple
+  @return: returns the tuple(loopback_device, list(device_mapper_files))
+
+  """
+  kpartx_cmd = ["kpartx", "-a", "-v", image_path]
+  result = utils_process.RunCmd(kpartx_cmd)
+  if result.failed:
+    raise errors.CommandError("Failed to add partition mapping (%s) : %s" %
+                              (kpartx_cmd, result.output))
+  dm_devs = [x.split(" ") for x in result.stdout.rstrip("\n").split("\n")]
+  assert len(dm_devs) > 0, "at least one line provided"
+  loop_dev = dm_devs[0][7]
+  assert all(x[7] == loop_dev for x in dm_devs), "all loop devs are the same"
+  return (loop_dev, [utils_io.PathJoin("/dev/mapper", x[2]) for x in dm_devs])
+
+def ReleaseDiskImageDeviceMapper(loop_dev_path):
+  """Release allocated dm devices and loopback devices
+
+  @type loop_dev_path: string
+  @param loop_dev_path: path of loopback device which returned by
+  L{CreateDiskImageDeviceMapper}
+
+  """
+  kpartx_cmd = ["kpartx", "-d", loop_dev_path]
+  result = utils_process.RunCmd(kpartx_cmd)
+  if result.failed:
+    raise errors.CommandError("Failed to delete partition mappings of %s (%s)"
+                              " : %s" %
+                              (loop_dev_path, kpartx_cmd, result.output))
+
+  losetup_cmd = ["losetup", "-d", loop_dev_path]
+  result = utils_process.RunCmd(losetup_cmd)
+  if result.failed:
+    raise errors.CommandError("Failed to detach %s (%s) : %s" %
+                              (loop_dev_path, losetup_cmd, result.output))
