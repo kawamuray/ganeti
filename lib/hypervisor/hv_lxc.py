@@ -439,7 +439,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       if not block_devices:
         raise HypervisorError("LXC needs at least one disk")
 
-      sda_disk, sda_dev_path = block_devices[0][0:1]
+      sda_disk, sda_dev_path = block_devices[0][0:2]
       if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
         # LXC needs to use device-mapper to access each partition of disk image
         (loop_dev, root_partition) = \
