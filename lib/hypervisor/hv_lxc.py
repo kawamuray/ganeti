@@ -33,6 +33,7 @@ from ganeti import errors # pylint: disable=W0611
 from ganeti import utils
 from ganeti import objects
 from ganeti import pathutils
+from ganeti import serializer
 from ganeti.hypervisor import hv_base
 from ganeti.errors import HypervisorError
 
@@ -343,6 +344,44 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       out.append("lxc.cap.drop = %s" % cap)
 
     return "\n".join(out) + "\n"
+
+  def _InstanceStashFile(self, instance_name):
+    return utils.PathJoin(self._ROOT_DIR, instance_name + ".stash")
+
+  def _SaveInstanceStash(self, instance_name, data):
+    """Save necessary informations to complete stop/cleanup phase in file
+
+    """
+    stash_file = self._InstanceStashFile(instance_name)
+    serialized = serializer.Dump(data)
+    try:
+      utils.WriteFile(stash_file, data=serialized)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to save instance stash file %s : %s"
+                            % (stash_file, err))
+
+  def _LoadInstanceStash(self, instance_name):
+    """Load stashed informations in file which was created by
+    L{_SaveInstanceStash}
+
+    """
+    stash_file = self._InstanceStashFile(instance_name)
+    if os.path.exists(stash_file):
+      try:
+        return serializer.Load(utils.ReadFile(stash_file))
+      # TODO handle JSONDecodeError too?
+      except EnvironmentError, err:
+        raise HypervisorError("Failed to load instance stash file %s : %s"
+                              % (stash_file, err))
+    else:
+      return None
+
+    serialized = serializer.Dump(data)
+    try:
+      utils.WriteFile(stash_file, data=serialized)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to save instance stash file %s : %s"
+                            % (stash_file, err))
 
   def StartInstance(self, instance, block_devices, startup_paused):
     """Start an instance.
