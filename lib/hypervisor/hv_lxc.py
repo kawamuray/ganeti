@@ -200,9 +200,15 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     data = []
-    for name in os.listdir(self._ROOT_DIR):
+    uniq_suffix = ".conf"
+    for filename in os.listdir(self._ROOT_DIR):
+      if not filename.endswith(uniq_suffix):
+        # listing all files in root directory will include instance root
+        # directory, console file, and etc, so use .conf as a representation
+        # of instance listings.
+        continue
       try:
-        info = self.GetInstanceInfo(name)
+        info = self.GetInstanceInfo(filename[0:-len(uniq_suffix)])
       except errors.HypervisorError:
         continue
       if info:
