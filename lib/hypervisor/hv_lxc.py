@@ -126,9 +126,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     cgroup_root = self._GetCgroupMountPoint()
-    if not os.path.isdir(cgroup_root):
-      os.mkdir(cgroup_root)
-
     subsys_dir = utils.PathJoin(cgroup_root, subsystem)
     if os.path.isdir(subsys_dir):
       # Check if cgroup subsystem is already mounted at this point
@@ -137,7 +134,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
              for x in utils.GetMounts()):
         return subsys_dir
     else:
-      os.mkdir(subsys_dir) # TODO should be makedirs?
+      os.makedirs(subsys_dir)
 
     mount_cmd = ['mount', '-t', 'cgroup', '-o', subsystem, subsystem, subsys_dir]
     result = self._run_cmd_fn(mount_cmd)
