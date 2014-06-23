@@ -131,7 +131,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
 
-  @classmethod
   def _SaveInstanceStash(cls, instance_name, data):
     """Save data to instance stash file in serialized format
 
@@ -144,7 +143,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise HypervisorError("Failed to save instance stash file %s : %s" %
                             (stash_file, err))
 
-  @classmethod
   def _LoadInstanceStash(cls, instance_name):
     """Load stashed informations in file which was created by
     L{_SaveInstanceStash}
