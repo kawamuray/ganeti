@@ -140,11 +140,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
 
-  def _SaveInstanceStash(cls, instance_name, data):
+  def _SaveInstanceStash(self, instance_name, data):
     """Save data to instance stash file in serialized format
 
     """
-    stash_file = cls._InstanceStashFile(instance_name)
+    stash_file = self._InstanceStashFile(instance_name)
     serialized = serializer.Dump(data)
     try:
       utils.WriteFile(stash_file, data=serialized)
@@ -152,12 +152,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise HypervisorError("Failed to save instance stash file %s : %s" %
                             (stash_file, err))
 
-  def _LoadInstanceStash(cls, instance_name):
+  def _LoadInstanceStash(self, instance_name):
     """Load stashed informations in file which was created by
     L{_SaveInstanceStash}
 
     """
-    stash_file = cls._InstanceStashFile(instance_name)
+    stash_file = self._InstanceStashFile(instance_name)
     if os.path.exists(stash_file):
       try:
         return serializer.Load(utils.ReadFile(stash_file))
@@ -168,13 +168,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     else:
       return None
 
-    serialized = serializer.Dump(data)
-    try:
-      utils.WriteFile(stash_file, data=serialized)
-    except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s" %
-                            (stash_file, err))
-
   def _MountCgroupSubsystem(self, subsystem):
     """Mount cgroup subsystem fs under the cgruop_root
 
@@ -183,17 +176,21 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     subsys_dir = utils.PathJoin(cgroup_root, subsystem)
     if os.path.isdir(subsys_dir):
       # Check if cgroup subsystem is already mounted at this point
-      if os.path.ismount(subsys_dir) and \
-         any(x[1] == subsys_dir and x[2] == "cgroup" and subsystem in x[3].split(",")
-             for x in utils.GetMounts()):
+      if os.path.ismount(subsys_dir) \
+         and any(x[1] == subsys_dir
+                 and x[2] == "cgroup"
+                 and subsystem in x[3].split(",")
+                 for x in utils.GetMounts()):
         return subsys_dir
     else:
       os.makedirs(subsys_dir)
 
-    mount_cmd = ["mount", "-t", "cgroup", "-o", subsystem, subsystem, subsys_dir]
+    mount_cmd = ["mount", "-t", "cgroup", "-o", subsystem, subsystem,
+                 subsys_dir]
     result = self._run_cmd_fn(mount_cmd)
     if result.failed:
-      raise HypervisorError("Running %s failed: %s" % (" ".join(mount_cmd), result.output))
+      raise HypervisorError("Running %s failed: %s" %
+                            (" ".join(mount_cmd), result.output))
 
     return subsys_dir
 
@@ -224,8 +221,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         msg = ("Processes still alive inside the container: %s" %
                self._run_cmd_fn("fuser -vm %s" % root_dir).output)
         logging.error(msg)
-        raise HypervisorError("Unmounting the instance root dir failed"
-                              " : %s (%s)" % (result.output, msg))
+        raise HypervisorError("Unmounting the instance root dir failed : %s" %
+                              msg)
 
   def CleanupInstance(self, instance_name, stash=None):
     self._UnmountInstanceDir(instance_name)
@@ -287,7 +284,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Return the list of CPU ids for an instance.
 
     """
-    cgroup = self._MountCgroupSubsystem("cpuset")
     try:
       cpumask = self._GetCgroupInstanceValue(instance_name,
                                              "cpuset", "cpuset.cpus")
@@ -455,44 +451,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       out.append("lxc.cap.drop = %s" % cap)
 
     return "\n".join(out) + "\n"
-
-  def _InstanceStashFile(self, instance_name):
-    return utils.PathJoin(self._ROOT_DIR, instance_name + ".stash")
-
-  def _SaveInstanceStash(self, instance_name, data):
-    """Save necessary informations to complete stop/cleanup phase in file
-
-    """
-    stash_file = self._InstanceStashFile(instance_name)
-    serialized = serializer.Dump(data)
-    try:
-      utils.WriteFile(stash_file, data=serialized)
-    except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s" %
-                            (stash_file, err))
-
-  def _LoadInstanceStash(self, instance_name):
-    """Load stashed informations in file which was created by
-    L{_SaveInstanceStash}
-
-    """
-    stash_file = self._InstanceStashFile(instance_name)
-    if os.path.exists(stash_file):
-      try:
-        return serializer.Load(utils.ReadFile(stash_file))
-      # TODO handle JSONDecodeError too?
-      except EnvironmentError, err:
-        raise HypervisorError("Failed to load instance stash file %s : %s" %
-                              (stash_file, err))
-    else:
-      return None
-
-    serialized = serializer.Dump(data)
-    try:
-      utils.WriteFile(stash_file, data=serialized)
-    except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s" %
-                            (stash_file, err))
 
   def _EnsureCgroupMounts(self):
     for subsystem in self._ENABLE_CGROUP_SUBSYSTEMS:
