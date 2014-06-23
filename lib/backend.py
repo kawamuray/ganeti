@@ -3881,6 +3881,7 @@ def _CheckOSPList(os_obj, parameters):
 
   """
   supported = [v[0] for v in os_obj.supported_parameters]
+  supported.append("os-image")
   delta = frozenset(parameters).difference(supported)
   if delta:
     _Fail("The following parameters are not supported"
