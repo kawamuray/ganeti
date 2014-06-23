@@ -259,10 +259,9 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     cgroups = {}
     for line in cgroup_list.split("\n"):
       _, subsystems, hierarchy = line.split(":")
-      assert(hierarchy.startswith('/'),
-             "all hierarchy listed in /proc/self/cgroup starts with '/'")
+      assert hierarchy.startswith('/')
       for subsys in subsystems.split(","):
-        assert(subsys not in cgroups, "no duplication in /proc/self/cgroup")
+        assert subsys not in cgroups
         cgroups[subsys] = hierarchy[1:] # discard first '/'
 
     return cgroups
