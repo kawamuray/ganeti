@@ -55,6 +55,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   """
   _ROOT_DIR = pathutils.RUN_DIR + "/lxc"
   _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
+  _PROC_CGROUP_FILE = "/proc/self/cgroup"
+
   _DEVS = [
     "c 1:3",   # /dev/null
     "c 1:5",   # /dev/zero
@@ -76,6 +78,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     "sys_time",        # Set  system  clock, set real-time (hardware) clock
     ]
   _DIR_MODE = 0755
+  _LXC_START_TIMEOUT = 60 # TODO move to hvparams
 
   PARAMETERS = {
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
@@ -121,6 +124,50 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".log")
+
+  @classmethod
+  def _InstanceStashFile(cls, instance_name):
+    """Return the stash file for an instance.
+
+    Stash file is used to keep informations that needs to complete
+    instance destruction during instance life.
+    """
+    return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
+
+  def _SaveInstanceStash(cls, instance_name, data):
+    """Save data to instance stash file in serialized format
+
+    """
+    stash_file = cls._InstanceStashFile(instance_name)
+    serialized = serializer.Dump(data)
+    try:
+      utils.WriteFile(stash_file, data=serialized)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to save instance stash file %s : %s" %
+                            (stash_file, err))
+
+  def _LoadInstanceStash(cls, instance_name):
+    """Load stashed informations in file which was created by
+    L{_SaveInstanceStash}
+
+    """
+    stash_file = cls._InstanceStashFile(instance_name)
+    if os.path.exists(stash_file):
+      try:
+        return serializer.Load(utils.ReadFile(stash_file))
+      # TODO handle JSONDecodeError too?
+      except EnvironmentError, err:
+        raise HypervisorError("Failed to load instance stash file %s : %s" %
+                              (stash_file, err))
+    else:
+      return None
+
+    serialized = serializer.Dump(data)
+    try:
+      utils.WriteFile(stash_file, data=serialized)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to save instance stash file %s : %s" %
+                            (stash_file, err))
 
   def _MountCgroupSubsystem(self, subsystem):
     """Mount cgroup subsystem fs under the cgruop_root
@@ -190,9 +237,45 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   def _GetCgroupMountPoint(cls):
     return cls._CGROUP_ROOT_DIR
 
-  def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
+  @classmethod
+  def _GetCurrentCgroupSubsysGroups(cls):
+    """Return the dictionary of cgroup subsystem that currently belonging to
+
+    The dictionary has cgroup subsystem as its key and hierarchy as its value.
+    Information is read from /proc/self/cgroup.
+    """
+    try:
+      cgroup_list = utils.ReadFile(cls._PROC_CGROUP_FILE)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to read %s : %s" %
+                            (cls._PROC_CGROUP_FILE, err))
+
+    cgroups = {}
+    for line in cgroup_list.split("\n"):
+      _, subsystems, hierarchy = line.split(":")
+      assert(hierarchy.startswith('/'),
+             "all hierarchy listed in /proc/self/cgroup starts with '/'")
+      for subsys in subsystems.split(","):
+        assert(subsys not in cgroups, "no duplication in /proc/self/cgroup")
+        cgroups[subsys] = hierarchy[1:] # discard first '/'
+
+    return cgroups
+
+  def _GetCgroupInstanceSubsysDir(self, instance_name, subsystem):
+    """Return the directory of cgroup subsystem for the instance
+
+    """
     subsys_dir = self._MountCgroupSubsystem(subsystem)
-    param_file = utils.PathJoin(subsys_dir, "lxc", instance_name, param)
+    base_group = self._GetCurrentCgroupSubsysGroups().get(subsystem, '')
+
+    return utils.PathJoin(subsys_dir, base_group, "lxc", instance_name)
+
+  def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
+    """Return the value of specified cgroup parameter
+
+    """
+    subsys_dir = self._GetCgroupInstanceSubsysDir(instance_name, subsystem)
+    param_file = utils.PathJoin(subsys_dir, param)
     return utils.ReadFile(param_file)
 
   def _GetCgroupCpuList(self, instance_name):
@@ -231,7 +314,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return [iinfo[0] for iinfo in self.GetAllInstancesInfo()]
 
   def _IsInstanceAlive(self, instance_name):
-    """Returns True if instance is alive
+    """Return True if instance is alive
 
     """
     result = self._run_cmd_fn(["lxc-info", "-s", "-n", instance_name])
@@ -416,6 +499,37 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     return (loop_dev, partition_devs[0])
 
+  def _SpawnLXC(self, instance_name, log_file, conf_file):
+    """Execute lxc-start and wait until container health is confirmed
+
+    """
+    lxc_start_cmd = [
+      "lxc-start",
+      "-n", instance_name,
+      "-o", log_file,
+      "-l", "DEBUG",
+      "-f", conf_file,
+      "-d"
+      ]
+
+    result = self._run_cmd_fn(lxc_start_cmd)
+    if result.failed:
+      raise HypervisorError("Failed to start instance %s : %s" %
+                            (instance_name, result.output))
+
+    lxc_wait_cmd = ["timeout", str(self._LXC_START_TIMEOUT),
+                    "lxc-wait", "-n", instance_name, "-s", "RUNNING"]
+    result = self._run_cmd_fn(lxc_wait_cmd)
+    if result.failed:
+      raise HypervisorError("Command %s failed : %s" %
+                            (lxc_wait_cmd, result.output))
+
+    # Ensure that the instance is running correctly after daemonized
+    if not self._IsInstanceAlive(instance_name):
+      raise HypervisorError("Failed to start instance %s :"
+                            " lxc process exitted after daemonized" %
+                            instance_name)
+
   def StartInstance(self, instance, block_devices, startup_paused):
     """Start an instance.
 
@@ -442,46 +556,30 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                      " instance %s failed: %s" %
                                      (log_file, instance.name, err))
 
-    if not os.path.ismount(root_dir):
-      if not block_devices:
-        raise HypervisorError("LXC needs at least one disk")
+    try:
+      if not os.path.ismount(root_dir):
+        if not block_devices:
+          raise HypervisorError("LXC needs at least one disk")
 
-      sda_disk, sda_dev_path = block_devices[0][0:2]
-      if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
-        # LXC needs to use device-mapper to access each partition of disk image
-        (loop_dev, root_partition) = \
-          self._PrepareFileStorageForMount(sda_dev_path)
-        stash["loopback-device"] = loop_dev
-        sda_dev_path = root_partition
+        sda_disk, sda_dev_path = block_devices[0][0:2]
+        if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
+          # LXC needs to use device-mapper to access each partition of disk image
+          (loop_dev, root_partition) = \
+            self._PrepareFileStorageForMount(sda_dev_path)
+          stash["loopback-device"] = loop_dev
+          sda_dev_path = root_partition
 
-      try:
         logging.info("Mounting rootfs %s", sda_dev_path)
         result = self._run_cmd_fn(["mount", sda_dev_path, root_dir])
         if result.failed:
           raise HypervisorError("Mounting the root dir of LXC instance %s"
                                 " failed: %s" % (instance.name, result.output))
 
-        logging.info("Running lxc-start")
-        result = self._run_cmd_fn(["lxc-start",
-                                   "-n", instance.name,
-                                   "-o", log_file,
-                                   "-l", "DEBUG",
-                                   "-f", conf_file,
-                                   "-d"])
-        if result.failed:
-          raise HypervisorError("Running the lxc-start failed: %s" %
-                                result.output)
-
-        # Ensure that the instance is running correctly after daemonized
-        if not self.GetInstanceInfo(instance.name):
-          raise HypervisorError("Failed to start instance %s :"
-                                " lxc process exitted after daemonized" %
-                                instance.name)
-
-      except Exception, err:
-        logging.warn(err)
-        self.CleanupInstance(instance.name, stash=stash)
-        raise err
+      logging.info("Starting LXC container")
+      self._SpawnLXC(instance.name, log_file, conf_file)
+    except Exception, err:
+      self.CleanupInstance(instance.name, stash=stash)
+      raise err
 
     self._SaveInstanceStash(instance.name, stash)
 
