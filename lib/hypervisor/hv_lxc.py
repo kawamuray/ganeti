@@ -77,6 +77,13 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     "sys_time",        # Set  system  clock, set real-time (hardware) clock
     ]
   _DIR_MODE = 0755
+  # TODO dynamically build from actual requirements
+  _ENABLE_CGROUP_SUBSYSTEMS = [
+    "cpuset",
+    "devices",
+    "memory",
+    "freezer",
+    ]
 
   PARAMETERS = {
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
@@ -460,6 +467,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return "\n".join(out) + "\n"
 
   @classmethod
+  def _EnsureCgroupMounts(cls):
+    for subsystem in cls._ENABLE_CGROUP_SUBSYSTEMS:
+      cls._GetOrPrepareCgroupSubsysMountPoint(subsystem)
+
+  @classmethod
   def _PrepareFileStorageForMount(cls, storage_path):
     try:
       (loop_dev, partition_devs) = \
@@ -525,6 +537,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     stash = {}
+
+    # Mount all cgroup fs required to run LXC
+    self._EnsureCgroupMounts()
+
     root_dir = self._InstanceDir(instance.name)
     try:
       utils.EnsureDirs([(root_dir, self._DIR_MODE)])
