@@ -192,7 +192,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     else:
       os.makedirs(subsys_dir)
 
-    mount_cmd = ["mount", "-t", "cgroup", "-o", subsystem, subsystem, subsys_dir]
+    mount_cmd = ["mount", "-t", "cgroup", "-o", subsystem, subsystem,
+                 subsys_dir]
     result = self._run_cmd_fn(mount_cmd)
     if result.failed:
       raise HypervisorError("Running %s failed: %s" % (" ".join(mount_cmd), result.output))
