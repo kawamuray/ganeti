@@ -55,6 +55,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   """
   _ROOT_DIR = pathutils.RUN_DIR + "/lxc"
   _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
+  _PROC_CGROUP_FILE = "/proc/self/cgroup"
+
   _DEVS = [
     "c 1:3",   # /dev/null
     "c 1:5",   # /dev/zero
@@ -234,9 +236,45 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   def _GetCgroupMountPoint(cls):
     return cls._CGROUP_ROOT_DIR
 
-  def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
+  @classmethod
+  def _GetCurrentCgroupSubsysGroups(cls):
+    """Return the dictionary of cgroup subsystem that currently belonging to
+
+    The dictionary has cgroup subsystem as its key and hierarchy as its value.
+    Information is read from /proc/self/cgroup.
+    """
+    try:
+      cgroup_list = utils.ReadFile(cls._PROC_CGROUP_FILE)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to read %s : %s" %
+                            (cls._PROC_CGROUP_FILE, err))
+
+    cgroups = {}
+    for line in cgroup_list.split("\n"):
+      _, subsystems, hierarchy = line.split(":")
+      assert(hierarchy.startswith('/'),
+             "all hierarchy listed in /proc/self/cgroup starts with '/'")
+      for subsys in subsystems.split(","):
+        assert(subsys not in cgroups, "no duplication in /proc/self/cgroup")
+        cgroups[subsys] = hierarchy[1:] # discard first '/'
+
+    return cgroups
+
+  def _GetCgroupInstanceSubsysDir(self, instance_name, subsystem):
+    """Return the directory of cgroup subsystem for the instance
+
+    """
     subsys_dir = self._MountCgroupSubsystem(subsystem)
-    param_file = utils.PathJoin(subsys_dir, "lxc", instance_name, param)
+    base_group = self._GetCurrentCgroupSubsysGroups().get(subsystem, '')
+
+    return utils.PathJoin(subsys_dir, base_group, "lxc", instance_name)
+
+  def _GetCgroupInstanceValue(self, instance_name, subsystem, param):
+    """Return the value of specified cgroup parameter
+
+    """
+    subsys_dir = self._GetCgroupInstanceSubsysDir(instance_name, subsystem)
+    param_file = utils.PathJoin(subsys_dir, param)
     return utils.ReadFile(param_file)
 
   def _GetCgroupCpuList(self, instance_name):
