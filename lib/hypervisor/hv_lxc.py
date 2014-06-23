@@ -457,7 +457,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     for subsystem in self._ENABLE_CGROUP_SUBSYSTEMS:
       self._MountCgroupSubsystem(subsystem)
 
-  def _PrepareFileStorageForMount(self, storage_path):
+  @classmethod
+  def _PrepareFileStorageForMount(cls, storage_path):
     try:
       (loop_dev, partition_devs) = \
         utils.CreateDiskImageDeviceMapper(storage_path)
