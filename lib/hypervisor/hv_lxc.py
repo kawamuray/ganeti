@@ -122,6 +122,52 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".log")
 
+  @classmethod
+  def _InstanceStashFile(cls, instance_name):
+    """Return the stash file for an instance.
+
+    Stash file is used to keep informations that needs to complete
+    instance destruction during instance life.
+    """
+    return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
+
+  @classmethod
+  def _SaveInstanceStash(cls, instance_name, data):
+    """Save data to instance stash file in serialized format
+
+    """
+    stash_file = cls._InstanceStashFile(instance_name)
+    serialized = serializer.Dump(data)
+    try:
+      utils.WriteFile(stash_file, data=serialized)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to save instance stash file %s : %s" %
+                            (stash_file, err))
+
+  @classmethod
+  def _LoadInstanceStash(cls, instance_name):
+    """Load stashed informations in file which was created by
+    L{_SaveInstanceStash}
+
+    """
+    stash_file = cls._InstanceStashFile(instance_name)
+    if os.path.exists(stash_file):
+      try:
+        return serializer.Load(utils.ReadFile(stash_file))
+      # TODO handle JSONDecodeError too?
+      except EnvironmentError, err:
+        raise HypervisorError("Failed to load instance stash file %s : %s" %
+                              (stash_file, err))
+    else:
+      return None
+
+    serialized = serializer.Dump(data)
+    try:
+      utils.WriteFile(stash_file, data=serialized)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to save instance stash file %s : %s" %
+                            (stash_file, err))
+
   def _MountCgroupSubsystem(self, subsystem):
     """Mount cgroup subsystem fs under the cgruop_root
 
