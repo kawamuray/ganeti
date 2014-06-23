@@ -230,6 +230,21 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return [iinfo[0] for iinfo in self.GetAllInstancesInfo()]
 
+  def _IsInstanceAlive(self, instance_name):
+    """Returns True if instance is alive
+
+    """
+    result = self._run_cmd_fn(["lxc-info", "-s", "-n", instance_name])
+    if result.failed:
+      raise HypervisorError("Running lxc-info failed: %s" % result.output)
+
+    # lxc-info output examples:
+    # 'state: STOPPED
+    # 'state: RUNNING
+    _, state = result.stdout.rsplit(None, 1)
+
+    return state == "RUNNING"
+
   def GetInstanceInfo(self, instance_name, hvparams=None):
     """Get instance properties.
 
@@ -243,15 +258,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     # TODO: read container info from the cgroup mountpoint
 
-    result = self._run_cmd_fn(["lxc-info", "-s", "-n", instance_name])
-    if result.failed:
-      raise errors.HypervisorError("Running lxc-info failed: %s" %
-                                   result.output)
-    # lxc-info output examples:
-    # 'state: STOPPED
-    # 'state: RUNNING
-    _, state = result.stdout.rsplit(None, 1)
-    if state != "RUNNING":
+    if not self._IsInstanceAlive(instance_name):
       return None
 
     cpu_list = self._GetCgroupCpuList(instance_name)
