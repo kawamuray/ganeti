@@ -869,6 +869,16 @@ virtio\_net\_queues
 
     It is set to ``1`` by default.
 
+lxc\_wait\_timeout
+    Valid for the LXC hypervisor.
+
+    This integer option specifies the seconds to wait until LXC
+    container's state change to "RUNNING".
+    The actual use of this value is as timeout seconds for lxc-wait
+    command.
+
+    It is set to ``30`` by default.
+
 The ``-O (--os-parameters)`` option allows customisation of the OS
 parameters. The actual parameter names and values depend on the OS being
 used, but the syntax is the same key=value. For example, setting a
