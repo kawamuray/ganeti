@@ -196,7 +196,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                  subsys_dir]
     result = self._run_cmd_fn(mount_cmd)
     if result.failed:
-      raise HypervisorError("Running %s failed: %s" % (" ".join(mount_cmd), result.output))
+      raise HypervisorError("Running %s failed: %s" %
+                            (" ".join(mount_cmd), result.output))
 
     return subsys_dir
 
