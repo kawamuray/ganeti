@@ -79,6 +79,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     ]
   _DIR_MODE = 0755
   _LXC_START_TIMEOUT = 60 # TODO move to hvparams
+  # TODO dynamically build from actual requirements
+  _ENABLE_CGROUP_SUBSYSTEMS = [
+    "cpuset",
+    "devices",
+    "memory",
+    ]
 
   PARAMETERS = {
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
@@ -489,6 +495,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise HypervisorError("Failed to save instance stash file %s : %s" %
                             (stash_file, err))
 
+  def _EnsureCgroupMounts(self):
+    for subsystem in self._ENABLE_CGROUP_SUBSYSTEMS:
+      self._MountCgroupSubsystem(subsystem)
+
   def _PrepareFileStorageForMount(self, storage_path):
     try:
       (loop_dev, partition_devs) = \
@@ -538,6 +548,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     stash = {}
+
+    # Mount all cgroup fs required to run LXC
+    self._EnsureCgroupMounts()
+
     root_dir = self._InstanceDir(instance.name)
     try:
       utils.EnsureDirs([(root_dir, self._DIR_MODE)])
