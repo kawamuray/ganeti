@@ -313,7 +313,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return [iinfo[0] for iinfo in self.GetAllInstancesInfo()]
 
   def _IsInstanceAlive(self, instance_name):
-    """Returns True if instance is alive
+    """Return True if instance is alive
 
     """
     result = self._run_cmd_fn(["lxc-info", "-s", "-n", instance_name])
