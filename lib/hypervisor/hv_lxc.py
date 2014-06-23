@@ -536,7 +536,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
         sda_disk, sda_dev_path = block_devices[0][0:2]
         if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
-          # LXC needs to use device-mapper to access each partition of disk image
+          # LXC needs to use device-mapper to access each partition of file
+          # based storage
           (loop_dev, root_partition) = \
             self._PrepareFileStorageForMount(sda_dev_path)
           stash["loopback-device"] = loop_dev
