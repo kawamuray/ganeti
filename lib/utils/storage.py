@@ -196,11 +196,9 @@ def CreateDiskImageDeviceMapper(image_path):
     raise errors.CommandError("Failed to add partition mapping (%s) : %s" %
                               (kpartx_cmd, result.output))
   dm_devs = [x.split(" ") for x in result.stdout.rstrip("\n").split("\n")]
-  assert(len(dm_devs) > 0,
-         "at least one line should be provided if command succeed")
+  assert len(dm_devs) > 0, "at least one line provided"
   loop_dev = dm_devs[0][7]
-  assert(all(x[7] == loop_dev for x in dm_devs),
-         "all loopback entries must be the same")
+  assert all(x[7] == loop_dev for x in dm_devs), "all loop devs are the same"
   return (loop_dev, [utils_io.PathJoin("/dev/mapper", x[2]) for x in dm_devs])
 
 def ReleaseDiskImageDeviceMapper(loop_dev_path):
