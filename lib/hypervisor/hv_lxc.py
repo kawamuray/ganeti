@@ -460,44 +460,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     return "\n".join(out) + "\n"
 
-  def _InstanceStashFile(self, instance_name):
-    return utils.PathJoin(self._ROOT_DIR, instance_name + ".stash")
-
-  def _SaveInstanceStash(self, instance_name, data):
-    """Save necessary informations to complete stop/cleanup phase in file
-
-    """
-    stash_file = self._InstanceStashFile(instance_name)
-    serialized = serializer.Dump(data)
-    try:
-      utils.WriteFile(stash_file, data=serialized)
-    except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s" %
-                            (stash_file, err))
-
-  def _LoadInstanceStash(self, instance_name):
-    """Load stashed informations in file which was created by
-    L{_SaveInstanceStash}
-
-    """
-    stash_file = self._InstanceStashFile(instance_name)
-    if os.path.exists(stash_file):
-      try:
-        return serializer.Load(utils.ReadFile(stash_file))
-      # TODO handle JSONDecodeError too?
-      except EnvironmentError, err:
-        raise HypervisorError("Failed to load instance stash file %s : %s" %
-                              (stash_file, err))
-    else:
-      return None
-
-    serialized = serializer.Dump(data)
-    try:
-      utils.WriteFile(stash_file, data=serialized)
-    except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s" %
-                            (stash_file, err))
-
   def _EnsureCgroupMounts(self):
     for subsystem in self._ENABLE_CGROUP_SUBSYSTEMS:
       self._MountCgroupSubsystem(subsystem)
