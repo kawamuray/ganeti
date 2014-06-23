@@ -1607,6 +1607,9 @@ hvKvmUseChroot = "use_chroot"
 hvKvmUserShutdown :: String
 hvKvmUserShutdown = "user_shutdown"
 
+hvLxcWaitTimeout :: String
+hvLxcWaitTimeout = "lxc_wait_timeout"
+
 hvMemPath :: String
 hvMemPath = "mem_path"
 
@@ -1766,6 +1769,7 @@ hvsParameterTypes = Map.fromList
   , (hvKvmSpiceZlibGlzImgCompr,         VTypeString)
   , (hvKvmUseChroot,                    VTypeBool)
   , (hvKvmUserShutdown,                 VTypeBool)
+  , (hvLxcWaitTimeout,                  VTypeInt)
   , (hvMemPath,                         VTypeString)
   , (hvMigrationBandwidth,              VTypeInt)
   , (hvMigrationDowntime,               VTypeInt)
@@ -3811,7 +3815,10 @@ hvcDefaults =
           , (hvVnetHdr,                         PyValueEx True)])
   , (Fake, Map.fromList [(hvMigrationMode, PyValueEx htMigrationLive)])
   , (Chroot, Map.fromList [(hvInitScript, PyValueEx "/ganeti-chroot")])
-  , (Lxc, Map.fromList [(hvCpuMask, PyValueEx "")])
+  , (Lxc, Map.fromList
+          [ (hvCpuMask,        PyValueEx "")
+          , (hvLxcWaitTimeout, PyValueEx (30 :: Int))
+          ])
   ]
 
 hvcGlobals :: FrozenSet String
