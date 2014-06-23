@@ -456,7 +456,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     for subsystem in self._ENABLE_CGROUP_SUBSYSTEMS:
       self._MountCgroupSubsystem(subsystem)
 
-  def _PrepareFileStorageForMount(self, storage_path):
+  @classmethod
+  def _PrepareFileStorageForMount(cls, storage_path):
     try:
       (loop_dev, partition_devs) = \
         utils.CreateDiskImageDeviceMapper(storage_path)
@@ -534,7 +535,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
         sda_disk, sda_dev_path = block_devices[0][0:2]
         if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
-          # LXC needs to use device-mapper to access each partition of disk image
+          # LXC needs to use device-mapper to access each partition of file
+          # based storage
           (loop_dev, root_partition) = \
             self._PrepareFileStorageForMount(sda_dev_path)
           stash["loopback-device"] = loop_dev
