@@ -194,9 +194,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     return subsys_dir
 
-  def CleanupCgroupMounts(self):
-    for subsys_dir in self._GetMountSubdirs(self._GetCgroupMountPoint()):
-      umount_cmd = ['umount', subsys_dir]
+  @classmethod
+  def CleanupCgroupMounts(cls):
+    for subsys_dir in cls._GetMountSubdirs(cls._GetCgroupMountPoint()):
+      umount_cmd = ["umount", subsys_dir]
       result = utils.RunCmd(umount_cmd)
       if result.failed:
         logging.warn("Running %s failed: %s", umount_cmd, result.output)
