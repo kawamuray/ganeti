@@ -10,4 +10,4 @@ make clean
 -hide-package=monads-tf \
 -hide-package=regex-pcre-builtin \
 "
-make -j2
+make -j4
