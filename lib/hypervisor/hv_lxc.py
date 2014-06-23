@@ -140,11 +140,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
 
-  def _SaveInstanceStash(cls, instance_name, data):
+  def _SaveInstanceStash(self, instance_name, data):
     """Save data to instance stash file in serialized format
 
     """
-    stash_file = cls._InstanceStashFile(instance_name)
+    stash_file = self._InstanceStashFile(instance_name)
     serialized = serializer.Dump(data)
     try:
       utils.WriteFile(stash_file, data=serialized)
@@ -152,12 +152,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise HypervisorError("Failed to save instance stash file %s : %s" %
                             (stash_file, err))
 
-  def _LoadInstanceStash(cls, instance_name):
+  def _LoadInstanceStash(self, instance_name):
     """Load stashed informations in file which was created by
     L{_SaveInstanceStash}
 
     """
-    stash_file = cls._InstanceStashFile(instance_name)
+    stash_file = self._InstanceStashFile(instance_name)
     if os.path.exists(stash_file):
       try:
         return serializer.Load(utils.ReadFile(stash_file))
@@ -167,13 +167,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                               (stash_file, err))
     else:
       return None
-
-    serialized = serializer.Dump(data)
-    try:
-      utils.WriteFile(stash_file, data=serialized)
-    except EnvironmentError, err:
-      raise HypervisorError("Failed to save instance stash file %s : %s" %
-                            (stash_file, err))
 
   def _MountCgroupSubsystem(self, subsystem):
     """Mount cgroup subsystem fs under the cgruop_root
