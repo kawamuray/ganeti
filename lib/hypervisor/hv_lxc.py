@@ -524,19 +524,19 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                      " instance %s failed: %s" %
                                      (log_file, instance.name, err))
 
-    if not os.path.ismount(root_dir):
-      if not block_devices:
-        raise HypervisorError("LXC needs at least one disk")
+    try:
+      if not os.path.ismount(root_dir):
+        if not block_devices:
+          raise HypervisorError("LXC needs at least one disk")
 
-      sda_disk, sda_dev_path = block_devices[0][0:2]
-      if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
-        # LXC needs to use device-mapper to access each partition of disk image
-        (loop_dev, root_partition) = \
-          self._PrepareFileStorageForMount(sda_dev_path)
-        stash["loopback-device"] = loop_dev
-        sda_dev_path = root_partition
+        sda_disk, sda_dev_path = block_devices[0][0:2]
+        if sda_disk.dev_type in (constants.DT_FILE, constants.DT_SHARED_FILE):
+          # LXC needs to use device-mapper to access each partition of disk image
+          (loop_dev, root_partition) = \
+            self._PrepareFileStorageForMount(sda_dev_path)
+          stash["loopback-device"] = loop_dev
+          sda_dev_path = root_partition
 
-      try:
         logging.info("Mounting rootfs %s", sda_dev_path)
         result = self._run_cmd_fn(["mount", sda_dev_path, root_dir])
         if result.failed:
@@ -559,11 +559,9 @@ class LXCHypervisor(hv_base.BaseHypervisor):
           raise HypervisorError("Failed to start instance %s :"
                                 " lxc process exitted after daemonized" %
                                 instance.name)
-
-      except Exception, err:
-        logging.warn(err)
-        self.CleanupInstance(instance.name, stash=stash)
-        raise err
+    except Exception, err:
+      self.CleanupInstance(instance.name, stash=stash)
+      raise err
 
     self._SaveInstanceStash(instance.name, stash)
 
