@@ -54,6 +54,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   """
   _ROOT_DIR = pathutils.RUN_DIR + "/lxc"
   _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
+  _PROC_CGROUP_FILE = "/proc/self/cgroup"
+
   _DEVS = [
     "c 1:3",   # /dev/null
     "c 1:5",   # /dev/zero
@@ -241,12 +243,45 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return cls._MountCgroupSubsystem(subsystem)
 
   @classmethod
+  def _GetCurrentCgroupSubsysGroups(cls):
+    """Return the dictionary of cgroup subsystem that currently belonging to
+
+    The dictionary has cgroup subsystem as its key and hierarchy as its value.
+    Information is read from /proc/self/cgroup.
+    """
+    try:
+      cgroup_list = utils.ReadFile(cls._PROC_CGROUP_FILE)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to read %s : %s" %
+                            (cls._PROC_CGROUP_FILE, err))
+
+    cgroups = {}
+    for line in filter(None, cgroup_list.split("\n")):
+      _, subsystems, hierarchy = line.split(":")
+      assert hierarchy.startswith("/")
+      for subsys in subsystems.split(","):
+        assert subsys not in cgroups
+        cgroups[subsys] = hierarchy[1:] # discard first '/'
+
+    return cgroups
+
+  @classmethod
+  def _GetCgroupInstanceSubsysDir(cls, instance_name, subsystem):
+    """Return the directory of cgroup subsystem for the instance
+
+    """
+    subsys_dir = cls._GetOrPrepareCgroupSubsysMountPoint(subsystem)
+    base_group = cls._GetCurrentCgroupSubsysGroups().get(subsystem, "")
+
+    return utils.PathJoin(subsys_dir, base_group, "lxc", instance_name)
+
+  @classmethod
   def _GetCgroupInstanceValue(cls, instance_name, subsystem, param):
     """Return the value of specified cgroup parameter
 
     """
-    subsys_dir = cls._MountCgroupSubsystem(subsystem)
-    param_file = utils.PathJoin(subsys_dir, "lxc", instance_name, param)
+    subsys_dir = cls._GetCgroupInstanceSubsysDir(instance_name, subsystem)
+    param_file = utils.PathJoin(subsys_dir, param)
     return utils.ReadFile(param_file).rstrip("\n")
 
   @classmethod
