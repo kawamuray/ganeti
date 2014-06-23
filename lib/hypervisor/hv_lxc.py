@@ -228,8 +228,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         msg = ("Processes still alive inside the container: %s" %
                self._run_cmd_fn("fuser -vm %s" % root_dir).output)
         logging.error(msg)
-        raise HypervisorError("Unmounting the instance root dir failed"
-                              " : %s (%s)" % (result.output, msg))
+        raise HypervisorError("Unmounting the instance root dir failed : %s" %
+                              msg)
 
   def CleanupInstance(self, instance_name, stash=None):
     self._UnmountInstanceDir(instance_name)
