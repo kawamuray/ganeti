@@ -292,7 +292,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Return the list of CPU ids for an instance.
 
     """
-    cgroup = self._MountCgroupSubsystem("cpuset")
     try:
       cpumask = self._GetCgroupInstanceValue(instance_name,
                                              "cpuset", "cpuset.cpus")
