@@ -267,7 +267,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                             (cls._PROC_CGROUP_FILE, err))
 
     cgroups = {}
-    for line in cgroup_list.split("\n"):
+    for line in filter(None, cgroup_list.split("\n")):
       _, subsystems, hierarchy = line.split(":")
       assert hierarchy.startswith('/')
       for subsys in subsystems.split(","):
