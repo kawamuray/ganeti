@@ -123,11 +123,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".conf")
 
   @classmethod
-  def _InstanceLogFile(cls, instance_name):
+  def _InstanceLogFile(cls, instance):
     """Return the log file for an instance.
 
     """
-    return utils.PathJoin(cls._ROOT_DIR, instance_name + ".log")
+    filename = "%s.%s.log" % (instance.name, instance.uuid)
+    return utils.PathJoin(cls._ROOT_DIR, filename)
 
   @classmethod
   def _InstanceStashFile(cls, instance_name):
@@ -550,7 +551,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     conf_file = self._InstanceConfFile(instance.name)
     utils.WriteFile(conf_file, data=self._CreateConfigFile(instance, root_dir))
 
-    log_file = self._InstanceLogFile(instance.name)
+    log_file = self._InstanceLogFile(instance)
     if not os.path.exists(log_file):
       try:
         utils.WriteFile(log_file, data="", mode=constants.SECURE_FILE_MODE)
