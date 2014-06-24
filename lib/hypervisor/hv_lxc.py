@@ -158,15 +158,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     stash_file = self._InstanceStashFile(instance_name)
-    if os.path.exists(stash_file):
-      try:
-        return serializer.Load(utils.ReadFile(stash_file))
-      # TODO handle JSONDecodeError too?
-      except EnvironmentError, err:
-        raise HypervisorError("Failed to load instance stash file %s : %s" %
-                              (stash_file, err))
-    else:
-      return None
+    try:
+      return serializer.Load(utils.ReadFile(stash_file))
+    # TODO handle JSONDecodeError too?
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to load instance stash file %s : %s" %
+                            (stash_file, err))
 
   def _MountCgroupSubsystem(self, subsystem):
     """Mount cgroup subsystem fs under the cgruop_root
