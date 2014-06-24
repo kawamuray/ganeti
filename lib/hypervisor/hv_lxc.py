@@ -78,7 +78,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     "sys_time",        # Set  system  clock, set real-time (hardware) clock
     ]
   _DIR_MODE = 0755
-  _LXC_START_TIMEOUT = 60 # TODO move to hvparams
   # TODO dynamically build from actual requirements
   _ENABLE_CGROUP_SUBSYSTEMS = [
     "cpuset",
@@ -88,6 +87,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
   PARAMETERS = {
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
+    constants.HV_LXC_WAIT_TIMEOUT: hv_base.OPT_NONNEGATIVE_INT_CHECK,
     }
 
   def __init__(self, _run_cmd_fn=None):
@@ -498,7 +498,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise HypervisorError("Failed to start instance %s : %s" %
                             (instance.name, result.output))
 
-    lxc_wait_cmd = ["timeout", str(self._LXC_START_TIMEOUT),
+    lxc_wait_timeout = instance.hvparams[constants.HV_LXC_WAIT_TIMEOUT]
+    lxc_wait_cmd = ["timeout", str(lxc_wait_timeout),
                     "lxc-wait", "-n", instance.name, "-s", "RUNNING"]
     result = self._run_cmd_fn(lxc_wait_cmd)
     if result.failed:
