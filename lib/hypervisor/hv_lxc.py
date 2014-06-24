@@ -95,7 +95,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     hv_base.BaseHypervisor.__init__(self)
     utils.EnsureDirs([
       (self._ROOT_DIR, self._DIR_MODE),
-      (self._LOG_DIR, self._DIR_MODE),
+      (self._LOG_DIR, 0750),
       ])
 
     self._run_cmd_fn = utils.RunCmd if _run_cmd_fn is None else _run_cmd_fn
