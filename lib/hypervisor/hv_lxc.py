@@ -231,7 +231,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         stash = self._LoadInstanceStash(instance_name)
       if stash is not None and "loopback-device" in stash:
         utils.ReleaseDiskImageDeviceMapper(stash["loopback-device"])
-    except Exception, err:
+    except errors.CommandError, err:
       logging.warn("Failed to cleanup partition mapping : %s", err)
 
     utils.RemoveFile(self._InstanceStashFile(instance_name))
