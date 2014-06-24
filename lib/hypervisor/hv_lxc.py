@@ -269,7 +269,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     cgroups = {}
     for line in filter(None, cgroup_list.split("\n")):
       _, subsystems, hierarchy = line.split(":")
-      assert hierarchy.startswith('/')
+      assert hierarchy.startswith("/")
       for subsys in subsystems.split(","):
         assert subsys not in cgroups
         cgroups[subsys] = hierarchy[1:] # discard first '/'
