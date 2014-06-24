@@ -564,7 +564,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                 " failed: %s" % (instance.name, result.output))
 
       logging.info("Starting LXC container")
-      self._SpawnLXC(instance, log_file, conf_file)
+      try:
+        self._SpawnLXC(instance, log_file, conf_file)
+      except:
+        logging.error("Failed to start instance %s. Please take a look at %s to"
+                      " see errors from LXC." % (instance.name, log_file))
+        raise
     except:
       need_cleanup = True
       raise
