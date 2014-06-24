@@ -177,7 +177,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if os.path.isdir(subsys_dir):
       # Check if cgroup subsystem is already mounted at this point
       if os.path.ismount(subsys_dir) \
-         and any(x[1] == subsys_dir
+         and any(os.path.samefile(x[1], subsys_dir)
                  and x[2] == "cgroup"
                  and subsystem in x[3].split(",")
                  for x in utils.GetMounts()):
