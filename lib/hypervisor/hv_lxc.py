@@ -133,7 +133,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Return the log file for an instance.
 
     """
-    filename = "%s.%s.log" % (instance.name, instance.uuid[-6:])
+    filename = "%s.%s.log" % (instance.name, instance.uuid)
     return utils.PathJoin(cls._LOG_DIR, filename)
 
   @classmethod
