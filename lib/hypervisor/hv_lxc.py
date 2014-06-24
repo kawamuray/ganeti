@@ -158,15 +158,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     stash_file = self._InstanceStashFile(instance_name)
-    if os.path.exists(stash_file):
-      try:
-        return serializer.Load(utils.ReadFile(stash_file))
-      # TODO handle JSONDecodeError too?
-      except EnvironmentError, err:
-        raise HypervisorError("Failed to load instance stash file %s : %s" %
-                              (stash_file, err))
-    else:
-      return None
+    try:
+      return serializer.Load(utils.ReadFile(stash_file))
+    # TODO handle JSONDecodeError too?
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to load instance stash file %s : %s" %
+                            (stash_file, err))
 
   def _MountCgroupSubsystem(self, subsystem):
     """Mount cgroup subsystem fs under the cgruop_root
@@ -177,7 +174,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if os.path.isdir(subsys_dir):
       # Check if cgroup subsystem is already mounted at this point
       if os.path.ismount(subsys_dir) \
-         and any(x[1] == subsys_dir
+         and any(os.path.samefile(x[1], subsys_dir)
                  and x[2] == "cgroup"
                  and subsystem in x[3].split(",")
                  for x in utils.GetMounts()):
@@ -203,15 +200,17 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         logging.warn("Running %s failed: %s", umount_cmd, result.output)
 
   def _UnmountDir(self, path, recurse=False):
+    mount_paths = []
     if recurse:
-      for subdir in self._GetMountSubdirs(path):
-        self._UnmountDir(subdir, recurse=recurse)
+      mount_paths.extend(self._GetMountSubdirs(path))
+    mount_paths.append(path)
 
-    umount_cmd = ["umount", path]
-    result = self._run_cmd_fn(umount_cmd)
-    if result.failed:
-      raise errors.CommandError("Running %s failed : %s" %
-                                (umount_cmd, result.output))
+    for path in mount_paths:
+      umount_cmd = ["umount", path]
+      result = self._run_cmd_fn(umount_cmd)
+      if result.failed:
+        raise errors.CommandError("Running %s failed : %s" %
+                                  (umount_cmd, result.output))
 
   def _UnmountInstanceDir(self, instance_name):
     root_dir = self._InstanceDir(instance_name)
@@ -225,17 +224,30 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         raise HypervisorError("Unmounting the instance root dir failed : %s" %
                               msg)
 
-  def CleanupInstance(self, instance_name, stash=None):
+  def _CleanupInstance(self, instance_name, stash):
+    """Actual implementation of instance cleanup procedure
+
+    """
     self._UnmountInstanceDir(instance_name)
     try:
-      if stash is None:
-        stash = self._LoadInstanceStash(instance_name)
-      if stash is not None and "loopback-device" in stash:
+      if "loopback-device" in stash:
         utils.ReleaseDiskImageDeviceMapper(stash["loopback-device"])
-    except Exception, err:
+    except errors.CommandError, err:
       logging.warn("Failed to cleanup partition mapping : %s", err)
 
     utils.RemoveFile(self._InstanceStashFile(instance_name))
+
+  def CleanupInstance(self, instance_name):
+    """Cleanup after a stopped instance
+
+    """
+    try:
+      stash = self._LoadInstanceStash(instance_name)
+    except HypervisorError, err:
+      logging.warn("%s", err)
+      stash = {}
+
+    self._CleanupInstance(instance_name, stash)
 
   @classmethod
   def _GetCgroupMountPoint(cls):
@@ -255,9 +267,9 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                             (cls._PROC_CGROUP_FILE, err))
 
     cgroups = {}
-    for line in cgroup_list.split("\n"):
+    for line in filter(None, cgroup_list.split("\n")):
       _, subsystems, hierarchy = line.split(":")
-      assert hierarchy.startswith('/')
+      assert hierarchy.startswith("/")
       for subsys in subsystems.split(","):
         assert subsys not in cgroups
         cgroups[subsys] = hierarchy[1:] # discard first '/'
@@ -269,7 +281,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     subsys_dir = self._MountCgroupSubsystem(subsystem)
-    base_group = self._GetCurrentCgroupSubsysGroups().get(subsystem, '')
+    base_group = self._GetCurrentCgroupSubsysGroups().get(subsystem, "")
 
     return utils.PathJoin(subsys_dir, base_group, "lxc", instance_name)
 
@@ -529,6 +541,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                      " instance %s failed: %s" %
                                      (log_file, instance.name, err))
 
+    need_cleanup = False
     try:
       if not os.path.ismount(root_dir):
         if not block_devices:
@@ -551,9 +564,16 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
       logging.info("Starting LXC container")
       self._SpawnLXC(instance.name, log_file, conf_file)
-    except Exception, err:
-      self.CleanupInstance(instance.name, stash=stash)
-      raise err
+    except:
+      need_cleanup = True
+      raise
+    finally:
+      if need_cleanup:
+        try:
+          self._CleanupInstance(instance.name, stash)
+        except HypervisorError, err:
+          logging.warn("Cleanup for instance %s incomplete : %s",
+                       instance.name, err)
 
     self._SaveInstanceStash(instance.name, stash)
 
