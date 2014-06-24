@@ -541,6 +541,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                      " instance %s failed: %s" %
                                      (log_file, instance.name, err))
 
+    need_cleanup = False
     try:
       if not os.path.ismount(root_dir):
         if not block_devices:
@@ -563,9 +564,16 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
       logging.info("Starting LXC container")
       self._SpawnLXC(instance.name, log_file, conf_file)
-    except Exception, err:
-      self._CleanupInstance(instance.name, stash)
-      raise err
+    except:
+      need_cleanup = True
+      raise
+    finally:
+      if need_cleanup:
+        try:
+          self._CleanupInstance(instance.name, stash)
+        except HypervisorError, err:
+          logging.warn("Cleanup for instance %s incomplete : %s",
+                       instance.name, err)
 
     self._SaveInstanceStash(instance.name, stash)
 
