@@ -203,15 +203,17 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         logging.warn("Running %s failed: %s", umount_cmd, result.output)
 
   def _UnmountDir(self, path, recurse=False):
+    mount_paths = []
     if recurse:
-      for subdir in self._GetMountSubdirs(path):
-        self._UnmountDir(subdir, recurse=recurse)
+      mount_paths.extend(self._GetMountSubdirs(path))
+    mount_paths.append(path)
 
-    umount_cmd = ["umount", path]
-    result = self._run_cmd_fn(umount_cmd)
-    if result.failed:
-      raise errors.CommandError("Running %s failed : %s" %
-                                (umount_cmd, result.output))
+    for path in mount_paths:
+      umount_cmd = ["umount", path]
+      result = self._run_cmd_fn(umount_cmd)
+      if result.failed:
+        raise errors.CommandError("Running %s failed : %s" %
+                                  (umount_cmd, result.output))
 
   def _UnmountInstanceDir(self, instance_name):
     root_dir = self._InstanceDir(instance_name)
