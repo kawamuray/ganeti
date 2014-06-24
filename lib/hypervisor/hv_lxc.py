@@ -573,7 +573,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         self._SpawnLXC(instance, log_file, conf_file)
       except:
         logging.error("Failed to start instance %s. Please take a look at %s to"
-                      " see errors from LXC." % (instance.name, log_file))
+                      " see errors from LXC.", (instance.name, log_file))
         raise
     except:
       need_cleanup = True
