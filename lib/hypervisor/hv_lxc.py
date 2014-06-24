@@ -54,6 +54,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
   """
   _ROOT_DIR = pathutils.RUN_DIR + "/lxc"
+  _LOG_DIR = pathutils.LOG_DIR + "/lxc"
   _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
   _PROC_CGROUP_FILE = "/proc/self/cgroup"
 
@@ -92,7 +93,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
   def __init__(self, _run_cmd_fn=None):
     hv_base.BaseHypervisor.__init__(self)
-    utils.EnsureDirs([(self._ROOT_DIR, self._DIR_MODE)])
+    utils.EnsureDirs([
+      (self._ROOT_DIR, self._DIR_MODE),
+      (self._LOG_DIR, self._DIR_MODE),
+      ])
 
     self._run_cmd_fn = utils.RunCmd if _run_cmd_fn is None else _run_cmd_fn
 
@@ -130,7 +134,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     filename = "%s.%s.log" % (instance.name, instance.uuid[-6:])
-    return utils.PathJoin(cls._ROOT_DIR, filename)
+    return utils.PathJoin(cls._LOG_DIR, filename)
 
   @classmethod
   def _InstanceStashFile(cls, instance_name):
