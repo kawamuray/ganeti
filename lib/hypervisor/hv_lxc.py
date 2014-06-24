@@ -281,7 +281,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     """
     subsys_dir = self._MountCgroupSubsystem(subsystem)
-    base_group = self._GetCurrentCgroupSubsysGroups().get(subsystem, '')
+    base_group = self._GetCurrentCgroupSubsysGroups().get(subsystem, "")
 
     return utils.PathJoin(subsys_dir, base_group, "lxc", instance_name)
 
