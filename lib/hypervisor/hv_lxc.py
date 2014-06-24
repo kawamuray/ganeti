@@ -224,17 +224,30 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         raise HypervisorError("Unmounting the instance root dir failed : %s" %
                               msg)
 
-  def CleanupInstance(self, instance_name, stash=None):
+  def _CleanupInstance(self, instance_name, stash):
+    """Actual implementation of instance cleanup procedure
+
+    """
     self._UnmountInstanceDir(instance_name)
     try:
-      if stash is None:
-        stash = self._LoadInstanceStash(instance_name)
-      if stash is not None and "loopback-device" in stash:
+      if "loopback-device" in stash:
         utils.ReleaseDiskImageDeviceMapper(stash["loopback-device"])
     except errors.CommandError, err:
       logging.warn("Failed to cleanup partition mapping : %s", err)
 
     utils.RemoveFile(self._InstanceStashFile(instance_name))
+
+  def CleanupInstance(self, instance_name):
+    """Cleanup after a stopped instance
+
+    """
+    try:
+      stash = self._LoadInstanceStash(instance_name)
+    except HypervisorError, err:
+      logging.warn("%s", err)
+      stash = {}
+
+    self._CleanupInstance(instance_name, stash)
 
   @classmethod
   def _GetCgroupMountPoint(cls):
@@ -551,7 +564,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       logging.info("Starting LXC container")
       self._SpawnLXC(instance.name, log_file, conf_file)
     except Exception, err:
-      self.CleanupInstance(instance.name, stash=stash)
+      self._CleanupInstance(instance.name, stash)
       raise err
 
     self._SaveInstanceStash(instance.name, stash)
