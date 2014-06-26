@@ -72,19 +72,6 @@ class TestConsole(unittest.TestCase):
     self.assertEqual(cons.host, node.name)
     self.assertEqual(cons.command[-1], instance.name)
 
-# class TestLXCHypervisorCgroupMount(unittest.TestCase):
-#   def test(self):
-#     hv = LXCHypervisor()
-#     cgroup_root = pathutils.RUN_DIR + "/lxc/cgroup"
-#     self.assertEqual(hv._GetCgroupMountPoint(),
-#                      cgroup_root)
-#     cpuset_subdir = cgroup_root + "/cpuset"
-#     self.assertEqual(hv._MountCgroupSubsystem('cpuset'),
-#                      cpuset_subdir)
-#     self.assertTrue(os.path.ismount(cpuset_subdir))
-#     self.assertIn(('cpuset', cpuset_subdir, 'cgroup'),
-#                   (x[0:2] for x in utils.GetMounts()))
-
 class TestLXCHypervisorGetInstanceInfo(unittest.TestCase):
   def setUp(self):
     self.orig__GetCgroupCpuList = LXCHypervisor._GetCgroupCpuList
