@@ -296,7 +296,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     subsys_dir = self._GetCgroupInstanceSubsysDir(instance_name, subsystem)
     param_file = utils.PathJoin(subsys_dir, param)
-    return utils.ReadFile(param_file)
+    return utils.ReadFile(param_file).rstrip("\n")
 
   def _GetCgroupCpuList(self, instance_name):
     """Return the list of CPU ids for an instance.
