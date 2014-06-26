@@ -29,13 +29,27 @@ from ganeti import hypervisor
 from ganeti import pathutils
 from ganeti import utils
 
+from ganeti.hypervisor import hv_base
 from ganeti.hypervisor import hv_lxc
 from ganeti.hypervisor.hv_lxc import LXCHypervisor
 
 import mock
+import os
+import shutil
+import tempfile
 import testutils
 
-def RunCmdMock(object):
+def setUpModule():
+  # Creating instance of LXCHypervisor will fail by permission issue of
+  # instance directories
+  temp_dir = tempfile.mkdtemp()
+  LXCHypervisor._ROOT_DIR = utils.PathJoin(temp_dir, "root")
+  LXCHypervisor._LOG_DIR = utils.PathJoin(temp_dir, "log")
+
+def tearDownModule():
+  shutil.rmtree(LXCHypervisor._LOG_DIR)
+
+class RunCmdMock(object):
   def __init__(self, hook_commands):
     self.hook_commands = hook_commands
 
@@ -59,66 +73,102 @@ class TestConsole(unittest.TestCase):
     self.assertEqual(cons.host, node.name)
     self.assertEqual(cons.command[-1], instance.name)
 
-class TestLXCHypervisorCgroupMount(unittest.TestCase):
-  def test(self):
-    hv = LXCHypervisor()
-    cgroup_root = pathutils.RUN_DIR + "/lxc/cgroup"
-    self.assertEqual(hv._GetCgroupMountPoint(),
-                     cgroup_root)
-    cpuset_subdir = cgroup_root + "/cpuset"
-    self.assertEqual(hv._MountCgroupSubsystem('cpuset'),
-                     cpuset_subdir)
-    self.assertTrue(os.path.ismount(cpuset_subdir))
-    self.assertIn(('cpuset', cpuset_subdir, 'cgroup'),
-                  (x[0:2] for x in utils.GetMounts()))
-
 class TestLXCHypervisorGetInstanceInfo(unittest.TestCase):
   def setUp(self):
-    self.orig__GetCgroupCpuList = hv_lxc.LXCHypervisor._GetCgroupCpuList
-    hv_lxc.LXCHypervisor._GetCgroupCpuList = mock.Mock(return_value=[1])
-    self.orig__GetCgroupMemoryLimit = hv_lxc.LXCHypervisor._GetCgroupMemoryLimit
-    hv_lxc.LXCHypervisor._GetCgroupMemoryLimit = mock.Mock(return_value=128*(1024 ** 2))
+    self.orig__GetCgroupCpuList = LXCHypervisor._GetCgroupCpuList
+    LXCHypervisor._GetCgroupCpuList = mock.Mock(return_value=[1])
+    self.orig__GetCgroupMemoryLimit = LXCHypervisor._GetCgroupMemoryLimit
+    LXCHypervisor._GetCgroupMemoryLimit = mock.Mock(return_value=128*(1024**2))
 
   def tearDown(self):
-    hv_lxc.LXCHypervisor._GetCgroupCpuList = self.orig__GetCgroupCpuList
-    hv_lxc.LXCHypervisor._GetCgroupMemoryLimit = self.orig__GetCgroupMemoryLimit
+    LXCHypervisor._GetCgroupCpuList = self.orig__GetCgroupCpuList
+    LXCHypervisor._GetCgroupMemoryLimit = self.orig__GetCgroupMemoryLimit
 
   def testRunningInstance(self):
-    hv = hv_lxc.LXCHypervisor(run_cmd_fn=RunCmdMock({
-      'lxc-info': mock.Mock(return_value=testutils.ReadTestData('lxc-info-running.txt')),
+    output = testutils.ReadTestData("lxc-info-running.txt")
+    result = utils.RunResult(0, None, output, "", [], None, None)
+    hv = LXCHypervisor(run_cmd_fn=RunCmdMock({
+      "lxc-info": mock.Mock(return_value=result),
     }))
-    self.assertEqual(hv.GetInstanceInfo('foo'),
-                     ('foo', 0, 128, 1, hv_base.HvInstanceState.RUNNING, 0))
+    self.assertEqual(hv.GetInstanceInfo("foo"),
+                     ("foo", 0, 128, 1, hv_base.HvInstanceState.RUNNING, 0))
 
   def testUnactiveOrNotExistInstance(self):
-    hv = hv_lxc.LXCHypervisor(run_cmd_fn=RunCmdMock({
-      'lxc-info': mock.Mock(return_value=testutils.ReadTestData('lxc-info-stopped.txt')),
+    output = testutils.ReadTestData("lxc-info-stopped.txt")
+    result = utils.RunResult(0, None, output, "", [], None, None)
+    hv = LXCHypervisor(run_cmd_fn=RunCmdMock({
+      "lxc-info": mock.Mock(return_value=result),
     }))
-    self.assertIsNone(hv.GetInstanceInfo('foo'))
+    self.assertIsNone(hv.GetInstanceInfo("foo"))
 
-
-
-class TestLXCHypervisorGetCgroupCpuList(unittest.TestCase):
+class TestCgroupReadData(unittest.TestCase):
   def setUp(self):
-    self.orig_ReadFile = utils.ReadFile
-    utils.ReadFile = mock.Mock(return_value=testutils.ReadTestData('cgroup-cpuset.cpus.txt'))
+    self.orig__CGROUP_ROOT_DIR = LXCHypervisor._CGROUP_ROOT_DIR
+    self.cgroup_root = testutils.TestDataFilename("cgroup_root")
+    self.cgroup_root = os.path.abspath(self.cgroup_root)
+    LXCHypervisor._CGROUP_ROOT_DIR = self.cgroup_root
+
+    self.orig__PROC_CGROUP_FILE = LXCHypervisor._PROC_CGROUP_FILE
+    LXCHypervisor._PROC_CGROUP_FILE = testutils.TestDataFilename(
+      "proc_cgroup.txt")
+
+    self.orig__MountCgroupSubsystem = LXCHypervisor._MountCgroupSubsystem
+    dummy = lambda _, x: utils.PathJoin(self.cgroup_root, x)
+    LXCHypervisor._MountCgroupSubsystem = dummy
+
+    self.hv = LXCHypervisor()
 
   def tearDown(self):
-    utils.ReadFile = self.orig_ReadFile
+    LXCHypervisor._CGROUP_ROOT_DIR = self.orig__CGROUP_ROOT_DIR
+    LXCHypervisor._PROC_CGROUP_FILE = self.orig__PROC_CGROUP_FILE
+    LXCHypervisor._MountCgroupSubsystem = self.orig__MountCgroupSubsystem
 
-  def test(self):
-    pass # TODO
+  def test_GetCgroupMountPoint(self):
+    self.assertEqual(self.hv._GetCgroupMountPoint(), self.cgroup_root)
 
-class TestLXCHypervisorGetCgroupCpuList(unittest.TestCase):
-  def setUp(self):
-    self.orig_ReadFile = utils.ReadFile
-    utils.ReadFile = mock.Mock(return_value=testutils.ReadTestData('cgroup-cpuset.txt'))
+  def test_GetCurrentCgroupSubsysGroups(self):
+    expected_groups = {
+      "memory": "", # root
+      "cpuset": "some_group",
+      "devices": "some_group",
+      }
+    self.assertEqual(self.hv._GetCurrentCgroupSubsysGroups(), expected_groups)
 
-  def tearDown(self):
-    utils.ReadFile = self.orig_ReadFile
+  def test_GetCgroupInstanceSubsysDir(self):
+    self.assertEqual(self.hv._GetCgroupInstanceSubsysDir("instance1", "memory"),
+                     utils.PathJoin(self.cgroup_root, "memory", "lxc",
+                                    "instance1"))
+    self.assertEqual(self.hv._GetCgroupInstanceSubsysDir("instance1", "cpuset"),
+                     utils.PathJoin(self.cgroup_root, "cpuset", "some_group",
+                                    "lxc", "instance1"))
+    self.assertEqual(self.hv._GetCgroupInstanceSubsysDir("instance1",
+                                                         "devices"),
+                     utils.PathJoin(self.cgroup_root, "devices", "some_group",
+                                    "lxc", "instance1"))
 
-  def test(self):
-    pass
+  def test_GetCgroupInstanceValue(self):
+    self.assertEqual(self.hv._GetCgroupInstanceValue("instance1", "memory",
+                                                     "memory.limit_in_bytes"),
+                     "128")
+    self.assertEqual(self.hv._GetCgroupInstanceValue("instance1", "cpuset",
+                                                     "cpuset.cpus"),
+                     "0-1")
+    self.assertEqual(self.hv._GetCgroupInstanceValue("instance1", "devices",
+                                                     "devices.list"),
+                     "a *:* rwm")
+
+  def test_GetCgroupCpuList(self):
+    self.assertEqual(self.hv._GetCgroupCpuList("instance1"), [0, 1])
+
+  def test_GetCgroupMemoryLimit(self):
+    self.assertEqual(self.hv._GetCgroupMemoryLimit("instance1"), 128)
+
+    # return 0 if could not read the file
+    orig_method = LXCHypervisor._GetCgroupInstanceValue
+    LXCHypervisor._GetCgroupInstanceValue = mock.Mock(
+      side_effect=EnvironmentError)
+    self.assertEqual(self.hv._GetCgroupMemoryLimit("instance1"), 0)
+    LXCHypervisor._GetCgroupInstanceValue = orig_method
 
 if __name__ == "__main__":
   testutils.GanetiTestProgram()
