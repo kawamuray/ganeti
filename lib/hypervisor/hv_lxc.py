@@ -25,7 +25,6 @@
 
 import os
 import os.path
-import time
 import logging
 
 from ganeti import constants
@@ -345,26 +344,29 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if name is None:
       name = instance.name
 
-    timeout_cmd = []
-    if timeout is not None:
-      timeout_cmd.extend(["timeout", str(timeout)])
-
-    root_dir = self._InstanceDir(name)
-    if not os.path.exists(root_dir):
-      return
-
     if name in self.ListInstances():
-      # Signal init to shutdown; this is a hack
-      if not retry and not force:
-        result = utils.RunCmd(["chroot", root_dir, "poweroff"])
+      if force:
+        result = utils.RunCmd(["lxc-stop", "-n", name])
         if result.failed:
-          raise HypervisorError("Running 'poweroff' on the instance"
-                                " failed: %s" % result.output)
-      time.sleep(2)
-      result = utils.RunCmd(timeout_cmd.extend(["lxc-stop", "-n", name]))
-      if result.failed:
-        logging.warning("Error while doing lxc-stop for %s: %s", name,
-                        result.output)
+          raise HypervisorError("Failed to run lxc-stop for instance %s: %s" %
+                                (name, result.output))
+      else:
+        # TODO should use lxc-shutdown
+        # Avoid to run poweroff command on host
+        root_dir = self._InstanceDir(name)
+        if not retry and os.path.ismount(root_dir):
+          poweroff_cmd = []
+          if timeout is not None:
+            poweroff_cmd.extend(["timeout", str(timeout)])
+          # Signal init to shutdown; this is a hack
+          poweroff_cmd.extend(["chroot", root_dir, "poweroff"])
+          result = utils.RunCmd(poweroff_cmd)
+          if result.failed:
+            logging.warn("Running 'poweroff' on the instance failed: %s",
+                         result.output)
+        else:
+          logging.warn("Nothing can do to gracefully shutdown instance %s",
+                       name)
 
     if not os.path.ismount(root_dir):
       return
