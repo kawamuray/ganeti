@@ -28,7 +28,9 @@ from ganeti import objects
 from ganeti import hypervisor
 from ganeti import utils
 
+from ganeti.hypervisor import hv_base
 from ganeti.hypervisor import hv_lxc
+from ganeti.hypervisor.hv_lxc import LXCHypervisor
 
 import mock
 import testutils
@@ -57,6 +59,32 @@ class TestConsole(unittest.TestCase):
     self.assertEqual(cons.host, node.name)
     self.assertEqual(cons.command[-1], instance.name)
 
+class TestLXCHypervisorGetInstanceInfo(unittest.TestCase):
+  def setUp(self):
+    self.orig_RunCmd = utils.RunCmd
+    self.orig__GetCgroupCpuList = LXCHypervisor._GetCgroupCpuList
+    LXCHypervisor._GetCgroupCpuList = mock.Mock(return_value=[1])
+    self.orig__GetCgroupMemoryLimit = LXCHypervisor._GetCgroupMemoryLimit
+    LXCHypervisor._GetCgroupMemoryLimit = mock.Mock(return_value=128*(1024**2))
+    self.hv = LXCHypervisor()
+
+  def tearDown(self):
+    utils.RunCmd = self.orig_RunCmd
+    LXCHypervisor._GetCgroupCpuList = self.orig__GetCgroupCpuList
+    LXCHypervisor._GetCgroupMemoryLimit = self.orig__GetCgroupMemoryLimit
+
+  def testRunningInstance(self):
+    output = testutils.ReadTestData("lxc-info-running.txt")
+    result = utils.RunResult(0, None, output, "", [], None, None)
+    utils.RunCmd = RunCmdMock({"lxc-info": mock.Mock(return_value=result)})
+    self.assertEqual(self.hv.GetInstanceInfo("foo"),
+                     ("foo", 0, 128, 1, hv_base.HvInstanceState.RUNNING, 0))
+
+  def testUnactiveOrNotExistInstance(self):
+    output = testutils.ReadTestData("lxc-info-stopped.txt")
+    result = utils.RunResult(0, None, output, "", [], None, None)
+    utils.RunCmd = RunCmdMock({"lxc-info": mock.Mock(return_value=result)})
+    self.assertIsNone(self.hv.GetInstanceInfo("foo"))
 
 if __name__ == "__main__":
   testutils.GanetiTestProgram()
