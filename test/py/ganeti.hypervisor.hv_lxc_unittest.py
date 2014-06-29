@@ -26,11 +26,22 @@ import unittest
 from ganeti import constants
 from ganeti import objects
 from ganeti import hypervisor
+from ganeti import utils
 
 from ganeti.hypervisor import hv_lxc
 
+import mock
 import testutils
 
+class RunCmdMock(object):
+  def __init__(self, hook_commands):
+    self.hook_commands = hook_commands
+
+  def __call__(self, cmd):
+    if cmd[0] in self.hook_commands:
+      return self.hook_commands[cmd[0]](cmd)
+    else:
+      return utils.RunCmd(cmd)
 
 class TestConsole(unittest.TestCase):
   def test(self):
