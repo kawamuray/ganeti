@@ -153,6 +153,36 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                             (stash_file, err))
 
   @classmethod
+  def _RecursiveUnmount(cls, path):
+    mount_paths = cls._GetMountSubdirs(path)
+    mount_paths.append(path)
+
+    for path in mount_paths:
+      umount_cmd = ["umount", path]
+      result = utils.RunCmd(umount_cmd)
+      if result.failed:
+        raise errors.CommandError("Running %s failed : %s" %
+                                  (umount_cmd, result.output))
+
+  def _UnmountInstanceDir(self, instance_name):
+    root_dir = self._InstanceDir(instance_name)
+    if os.path.ismount(root_dir):
+      try:
+        self._RecursiveUnmount(root_dir)
+      except errors.CommandError:
+        msg = ("Processes still alive inside the container: %s" %
+               utils.RunCmd("fuser -vm %s" % root_dir).output)
+        logging.error(msg)
+        raise HypervisorError("Unmounting the instance root dir failed : %s" %
+                              msg)
+
+  def CleanupInstance(self, instance_name):
+    """Cleanup after a stopped instance
+
+    """
+    self._UnmountInstanceDir(instance_name)
+
+  @classmethod
   def _GetCgroupMountPoint(cls):
     for _, mountpoint, fstype, _ in utils.GetMounts():
       if fstype == "cgroup":
@@ -408,23 +438,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         else:
           logging.warn("Nothing can do to gracefully shutdown instance %s",
                        name)
-
-    if not os.path.ismount(root_dir):
-      return
-
-    for mpath in self._GetMountSubdirs(root_dir):
-      result = utils.RunCmd(timeout_cmd.extend(["umount", mpath]))
-      if result.failed:
-        logging.warning("Error while umounting subpath %s for instance %s: %s",
-                        mpath, name, result.output)
-
-    result = utils.RunCmd(timeout_cmd.extend(["umount", root_dir]))
-    if result.failed and force:
-      msg = ("Processes still alive in the chroot: %s" %
-             utils.RunCmd("fuser -vm %s" % root_dir).output)
-      logging.error(msg)
-      raise HypervisorError("Unmounting the chroot dir failed: %s (%s)" %
-                            (result.output, msg))
 
   def RebootInstance(self, instance):
     """Reboot an instance.
