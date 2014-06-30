@@ -176,11 +176,30 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         raise HypervisorError("Unmounting the instance root dir failed : %s" %
                               msg)
 
+  def _CleanupInstance(self, instance_name, stash):
+    """Actual implementation of instance cleanup procedure
+
+    """
+    self._UnmountInstanceDir(instance_name)
+    try:
+      if "loopback-device" in stash:
+        utils.ReleaseDiskImageDeviceMapper(stash["loopback-device"])
+    except errors.CommandError, err:
+      raise HypervisorError("Failed to cleanup partition mapping : %s" % err)
+
+    utils.RemoveFile(self._InstanceStashFile(instance_name))
+
   def CleanupInstance(self, instance_name):
     """Cleanup after a stopped instance
 
     """
-    self._UnmountInstanceDir(instance_name)
+    try:
+      stash = self._LoadInstanceStash(instance_name)
+    except HypervisorError, err:
+      logging.warn("%s", err)
+      stash = {}
+
+    self._CleanupInstance(instance_name, stash)
 
   @classmethod
   def _GetCgroupMountPoint(cls):
@@ -358,6 +377,17 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     return "\n".join(out) + "\n"
 
+  @classmethod
+  def _PrepareFileStorageForMount(cls, storage_path):
+    try:
+      (loop_dev, partition_devs) = \
+        utils.CreateDiskImageDeviceMapper(storage_path)
+    except errors.CommandError, err:
+      raise HypervisorError("Failed to create partition mapping for %s"
+                            " : %s" % (storage_path, err))
+
+    return (loop_dev, partition_devs[0])
+
   def StartInstance(self, instance, block_devices, startup_paused):
     """Start an instance.
 
@@ -365,6 +395,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     We use volatile containers.
 
     """
+    stash = {}
     root_dir = self._InstanceDir(instance.name)
     try:
       utils.EnsureDirs([(root_dir, self._DIR_MODE)])
@@ -383,22 +414,47 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                      " instance %s failed: %s" %
                                      (log_file, instance.name, err))
 
-    if not os.path.ismount(root_dir):
-      if not block_devices:
-        raise HypervisorError("LXC needs at least one disk")
+    need_cleanup = False
+    try:
+      if not os.path.ismount(root_dir):
+        if not block_devices:
+          raise HypervisorError("LXC needs at least one disk")
 
-      sda_dev_path = block_devices[0][1]
-      result = utils.RunCmd(["mount", sda_dev_path, root_dir])
-      if result.failed:
-        raise HypervisorError("Mounting the root dir of LXC instance %s"
-                              " failed: %s" % (instance.name, result.output))
-    result = utils.RunCmd(["lxc-start", "-n", instance.name,
-                           "-o", log_file,
-                           "-l", "DEBUG",
-                           "-f", conf_file, "-d"])
-    if result.failed:
-      raise HypervisorError("Running the lxc-start script failed: %s" %
-                            result.output)
+        sda_dev_path = block_devices[0][1]
+        # LXC needs to use partition mapping devices to access each partition
+        # of the storage
+        (loop_dev, root_part) = self._PrepareFileStorageForMount(sda_dev_path)
+        stash["loopback-device"] = loop_dev
+        sda_dev_path = root_part
+
+        logging.info("Mounting rootfs %s", sda_dev_path)
+        result = utils.RunCmd(["mount", sda_dev_path, root_dir])
+        if result.failed:
+          raise HypervisorError("Mounting the root dir of LXC instance %s"
+                                " failed: %s" % (instance.name, result.output))
+
+        logging.info("Running lxc-start")
+        result = utils.RunCmd(["lxc-start",
+                               "-n", instance.name,
+                               "-o", log_file,
+                               "-l", "DEBUG",
+                               "-f", conf_file,
+                               "-d"])
+        if result.failed:
+          raise HypervisorError("Running the lxc-start failed: %s" %
+                                result.output)
+    except:
+      need_cleanup = True
+      raise
+    finally:
+      if need_cleanup:
+        try:
+          self._CleanupInstance(instance.name, stash)
+        except HypervisorError, err:
+          logging.warn("Cleanup for instance %s incomplete : %s",
+                       instance.name, err)
+
+    self._SaveInstanceStash(instance.name, stash)
 
   def StopInstance(self, instance, force=False, retry=False, name=None,
                    timeout=None):
