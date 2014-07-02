@@ -393,7 +393,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         data.append(info)
     return data
 
-  def _CreateConfigFile(self, instance, root_dir):
+  def _CreateConfigFile(self, instance, root_dir, sda_dev_path):
     """Create an lxc.conf file for an instance.
 
     """
@@ -416,7 +416,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     out.append("lxc.console = %s" % console_log)
 
     # root FS
-    out.append("lxc.rootfs = %s" % root_dir)
+    out.append("lxc.rootfs = %s" % sda_dev_path)
+    # out.append("lxc.mount.entry = %s %s none 0 0" % (sda_dev_path, root_dir))
 
     # TODO: additional mounts, if we disable CAP_SYS_ADMIN
 
@@ -552,9 +553,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     except errors.GenericError, err:
       raise HypervisorError("Creating instance directory failed: %s", str(err))
 
-    conf_file = self._InstanceConfFile(instance.name)
-    utils.WriteFile(conf_file, data=self._CreateConfigFile(instance, root_dir))
-
     log_file = self._InstanceLogFile(instance)
     if not os.path.exists(log_file):
       try:
@@ -577,11 +575,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
         stash["loopback-device"] = loop_dev
         sda_dev_path = root_part
 
-        logging.info("Mounting rootfs %s", sda_dev_path)
-        result = utils.RunCmd(["mount", sda_dev_path, root_dir])
-        if result.failed:
-          raise HypervisorError("Mounting the root dir of LXC instance %s"
-                                " failed: %s" % (instance.name, result.output))
+        conf_file = self._InstanceConfFile(instance.name)
+        utils.WriteFile(conf_file, data=self._CreateConfigFile(instance, root_dir, sda_dev_path))
 
       logging.info("Starting LXC container")
       try:
