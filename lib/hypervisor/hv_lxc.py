@@ -622,28 +622,19 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       name = instance.name
 
     if self._IsInstanceAlive(instance.name):
+      lxc_stop_cmd = ["lxc-stop", "-n", name]
+
       if force:
-        result = utils.RunCmd(["lxc-stop", "-n", name])
+        lxc_stop_cmd.append("--kill")
+        result = utils.RunCmd(lxc_stop_cmd)
         if result.failed:
-          raise HypervisorError("Failed to run lxc-stop for instance %s: %s" %
+          raise HypervisorError("Failed to kill instance %s: %s" %
                                 (name, result.output))
       else:
-        # TODO should use lxc-shutdown
-        # Avoid to run poweroff command on host
-        root_dir = self._InstanceDir(name)
-        if not retry and os.path.ismount(root_dir):
-          poweroff_cmd = []
-          if timeout is not None:
-            poweroff_cmd.extend(["timeout", str(timeout)])
-          # Signal init to shutdown; this is a hack
-          poweroff_cmd.extend(["chroot", root_dir, "poweroff"])
-          result = utils.RunCmd(poweroff_cmd)
-          if result.failed:
-            logging.warn("Running 'poweroff' on the instance failed: %s",
-                         result.output)
-        else:
-          logging.warn("Nothing can do to gracefully shutdown instance %s",
-                       name)
+        lxc_stop_cmd.extend(["--nokill", "--timeout", "-1"])
+        result = utils.RunCmd(lxc_stop_cmd, timeout=timeout)
+        if result.failed:
+          logging.error("Failed to stop instance %s: %s", name, result.output)
 
   def RebootInstance(self, instance):
     """Reboot an instance.
