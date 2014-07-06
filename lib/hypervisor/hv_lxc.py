@@ -55,7 +55,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   _ROOT_DIR = pathutils.RUN_DIR + "/lxc"
   _LOG_DIR = pathutils.LOG_DIR + "/lxc"
   _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
-  _PROC_CGROUP_FILE = "/proc/self/cgroup"
+  _PROC_CGROUPS_FILE = "/proc/cgroups"
+  _PROC_SELF_CGROUP_FILE = "/proc/self/cgroup"
 
   _DEVS = [
     "c 1:3",   # /dev/null
@@ -78,13 +79,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     "sys_time",        # Set  system  clock, set real-time (hardware) clock
     ]
   _DIR_MODE = 0755
-  # TODO dynamically build from actual requirements
-  _ENABLE_CGROUP_SUBSYSTEMS = [
-    "cpuset",
-    "devices",
-    "memory",
-    "freezer",
-    ]
 
   PARAMETERS = {
     constants.HV_CPU_MASK: hv_base.OPT_CPU_MASK_CHECK,
@@ -262,10 +256,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     Information is read from /proc/self/cgroup.
     """
     try:
-      cgroup_list = utils.ReadFile(cls._PROC_CGROUP_FILE)
+      cgroup_list = utils.ReadFile(cls._PROC_SELF_CGROUP_FILE)
     except EnvironmentError, err:
       raise HypervisorError("Failed to read %s : %s" %
-                            (cls._PROC_CGROUP_FILE, err))
+                            (cls._PROC_SELF_CGROUP_FILE, err))
 
     cgroups = {}
     for line in filter(None, cgroup_list.split("\n")):
@@ -473,8 +467,26 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return "\n".join(out) + "\n"
 
   @classmethod
-  def _EnsureCgroupMounts(cls):
-    for subsystem in cls._ENABLE_CGROUP_SUBSYSTEMS:
+  def _GetCgroupEnabledKernelSubsystems(cls):
+    """Return cgroup subsystems list that are enabled in current kernel
+
+    """
+    try:
+      subsys_table = utils.ReadFile(cls._PROC_CGROUPS_FILE)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to read cgroup info from %s: %s"
+                            % (cls._PROC_CGROUPS_FILE, err))
+    return [x.split(None, 1)[0] for x in subsys_table.split("\n")
+            if x and not x.startswith("#")]
+
+  @classmethod
+  def _EnsureCgroupMounts(cls, instance):
+    # hi = constants.HV_LXC_ENABLED_CGROUP_SUBSYSTEMS
+    # enabled_subsystems = instance.hvparams[hi]
+    enabled_subsystems = None
+    if enabled_subsystems is None:
+      enabled_subsystems = cls._GetCgroupEnabledKernelSubsystems()
+    for subsystem in enabled_subsystems:
       cls._GetOrPrepareCgroupSubsysMountPoint(subsystem)
 
   @classmethod
@@ -545,7 +557,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     stash = {}
 
     # Mount all cgroup fs required to run LXC
-    self._EnsureCgroupMounts()
+    self._EnsureCgroupMounts(instance)
 
     root_dir = self._InstanceDir(instance.name)
     try:

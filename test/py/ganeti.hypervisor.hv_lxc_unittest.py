@@ -138,8 +138,8 @@ class TestCgroupReadData(unittest.TestCase):
     self.cgroup_root = os.path.abspath(self.cgroup_root)
     LXCHypervisor._CGROUP_ROOT_DIR = self.cgroup_root
 
-    self.orig__PROC_CGROUP_FILE = LXCHypervisor._PROC_CGROUP_FILE
-    LXCHypervisor._PROC_CGROUP_FILE = testutils.TestDataFilename(
+    self.orig__PROC_SELF_CGROUP_FILE = LXCHypervisor._PROC_SELF_CGROUP_FILE
+    LXCHypervisor._PROC_SELF_CGROUP_FILE = testutils.TestDataFilename(
       "proc_cgroup.txt")
 
     orig = LXCHypervisor._GetOrPrepareCgroupSubsysMountPoint
@@ -152,7 +152,7 @@ class TestCgroupReadData(unittest.TestCase):
 
   def tearDown(self):
     LXCHypervisor._CGROUP_ROOT_DIR = self.orig__CGROUP_ROOT_DIR
-    LXCHypervisor._PROC_CGROUP_FILE = self.orig__PROC_CGROUP_FILE
+    LXCHypervisor._PROC_SELF_CGROUP_FILE = self.orig__PROC_SELF_CGROUP_FILE
     orig = self.orig__GetOrPrepareCgroupSubsysMountPoint
     LXCHypervisor._GetOrPrepareCgroupSubsysMountPoint = orig
 
