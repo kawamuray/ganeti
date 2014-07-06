@@ -640,8 +640,11 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Reboot an instance.
 
     """
-    self.StopInstance(instance, retry=True, force=True)
-    self.StartInstance(instance, None, None)
+    result = utils.RunCmd(["lxc-stop", "-n", instance.name, "--reboot",
+                           "--timeout", "-1"])
+    if result.failed:
+      raise HypervisorError("Failed to reboot instance %s: %s" %
+                            (instance.name, result.output))
 
   def BalloonInstanceMemory(self, instance, mem):
     """Balloon an instance memory to a certain value.
