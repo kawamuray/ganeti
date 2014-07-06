@@ -331,16 +331,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Return True if instance is alive
 
     """
-    result = utils.RunCmd(["lxc-info", "-s", "-n", instance_name])
+    result = utils.RunCmd(["lxc-ls", "--running"])
     if result.failed:
-      raise HypervisorError("Running lxc-info failed: %s" % result.output)
+      raise HypervisorError("Failed to get running LXC containers list: %s" %
+                            result.output)
 
-    # lxc-info output examples:
-    # 'state: STOPPED
-    # 'state: RUNNING
-    _, state = result.stdout.rsplit(None, 1)
-
-    return state == "RUNNING"
+    return instance_name in result.stdout.split()
 
   def GetInstanceInfo(self, instance_name, hvparams=None):
     """Get instance properties.
