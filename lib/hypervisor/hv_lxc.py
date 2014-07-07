@@ -23,6 +23,7 @@
 
 """
 
+import itertools
 import os
 import os.path
 import logging
@@ -57,6 +58,15 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   _CGROUP_ROOT_DIR = _ROOT_DIR + "/cgroup"
   _PROC_CGROUPS_FILE = "/proc/cgroups"
   _PROC_SELF_CGROUP_FILE = "/proc/self/cgroup"
+
+  _LXC_MIN_VERSION_REQUIRED = "1.0.0"
+  _LXC_COMMANDS_REQUIRED = [
+    "lxc-console",
+    "lxc-ls",
+    "lxc-start",
+    "lxc-stop",
+    "lxc-wait",
+    ]
 
   _DEVS = [
     "c 1:3",   # /dev/null
@@ -680,6 +690,67 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                    user=constants.SSH_CONSOLE_USER,
                                    command=["lxc-console", "-n", instance.name])
 
+  @classmethod
+  def _CompareLXCVersion(cls, v1, v2):
+    """Compare two version strings and return the result.
+
+    Return 1 if v1 is grater than v2.
+    Return 0 if v1 is equal to v2.
+    Return -1 if v1 is less than v2.
+
+    """
+    for vv1, vv2 in itertools.izip_longest((int(x) for x in v1.split(".")),
+                                           (int(x) for x in v2.split(".")),
+                                           fillvalue=0):
+      if vv1 != vv2:
+        return 1 if vv1 > vv2 else -1
+    return 0
+
+  @classmethod
+  def _VerifyLXCCommandsVersion(cls):
+    """Verify LXC version and commands validity.
+
+    """
+    msgs = []
+    for cmd in cls._LXC_COMMANDS_REQUIRED:
+      try:
+        # lxc-ls needs special checking method.
+        # there is two different version of lxc-ls, one is written in python
+        # and the other is written in shell script.
+        # we have to ensure python version of lxc-ls commands is installed.
+        if cmd == "lxc-ls":
+          # https://lists.linuxcontainers.org/pipermail/lxc-devel/2014-July/0097
+          # 53.html
+          # lxc-ls command has no --version switch until ^^ patch is merged
+          help_string = utils.RunCmd(["lxc-ls", "--help"]).output
+          if "--running" not in help_string:
+            # shell script version has no --running switch
+            msgs.append("Python version of 'lxc-ls' command is required."
+                        " You may installed lxc without --enable-python?")
+        else:
+          result = utils.RunCmd([cmd, "--version"])
+          if result.failed:
+            msgs.append("Can't get version info from %s: %s" %
+                        (cmd, result.output))
+          else:
+            version = result.stdout.strip()
+            try:
+              vok = cls._CompareLXCVersion(cls._LXC_MIN_VERSION_REQUIRED,
+                                           version) <= 0:
+            except ValueError:
+              msgs.append("Can't parse version info from %s output: %s" %
+                          (cmd, version))
+              continue
+            if not vok:
+              msgs.append("LXC version >= %s is required but command %s has"
+                          " version %s" %
+                          (cls._LXC_MIN_VERSION_REQUIRED, cmd, version))
+      except errors.OpExecError:
+        msgs.append("Required command %s not found" % cmd)
+        continue
+
+    return msgs
+
   def Verify(self, hvparams=None):
     """Verify the hypervisor.
 
@@ -701,6 +772,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       self._GetCgroupMountPoint()
     except errors.HypervisorError, err:
       msgs.append(str(err))
+
+    msgs.extend(self._VerifyLXCCommandsVersion())
 
     return self._FormatVerifyResults(msgs)
 
