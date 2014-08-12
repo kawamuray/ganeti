@@ -401,15 +401,19 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     @return: (name, id, memory, vcpus, stat, times)
 
     """
-    # TODO: read container info from the cgroup mountpoint
-
     if not self._IsInstanceAlive(instance_name):
       return None
 
     cpu_list = self._GetCgroupCpuList(instance_name)
     memory = self._GetCgroupMemoryLimit(instance_name) / (1024 ** 2)
+    try:
+      cputime_ns = self._GetCgroupInstanceValue(instance_name, "cpuacct.usage")
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to get the cpu usage of %s: %s" %
+                            (instance_name, err))
+    cputime_sec = float(cputime_ns) / 10 ** 9
     return (instance_name, 0, memory, len(cpu_list),
-            hv_base.HvInstanceState.RUNNING, 0)
+            hv_base.HvInstanceState.RUNNING, cputime_sec)
 
   def GetAllInstancesInfo(self, hvparams=None):
     """Get properties of all instances.
