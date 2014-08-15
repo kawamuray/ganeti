@@ -1225,10 +1225,11 @@ class LUClusterSetParams(LogicalUnit):
     self.new_hvparams = new_hvp = objects.FillDict(cluster.hvparams, {})
     if self.op.hvparams:
       for hv_name, hv_dict in self.op.hvparams.items():
-        if hv_name not in self.new_hvparams:
-          self.new_hvparams[hv_name] = hv_dict
-        else:
-          self.new_hvparams[hv_name].update(hv_dict)
+        old_hvparams = self.new_hvparams.get(hv_name, {})
+        updated_hvparams = GetUpdatedParams(old_hvparams, hv_dict)
+        new_hvparams = objects.FillDict(updated_hvparams,
+                                        constants.HVC_DEFAULTS[hv_name])
+        self.new_hvparams[hv_name] = new_hvparams
 
     # disk template parameters
     self.new_diskparams = objects.FillDict(cluster.diskparams, {})

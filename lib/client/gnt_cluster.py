@@ -1205,6 +1205,10 @@ def SetClusterParams(opts, args):
   # a list of (name, dict) we can pass directly to dict() (or [])
   hvparams = dict(opts.hvparams)
   for hv_params in hvparams.values():
+    for param in hv_params:
+      if isinstance(hv_params[param], basestring) \
+         and hv_params[param].lower() == "default":
+        hv_params[param] = constants.VALUE_DEFAULT
     utils.ForceDictType(hv_params, constants.HVS_PARAMETER_TYPES)
 
   diskparams = dict(opts.diskparams)
