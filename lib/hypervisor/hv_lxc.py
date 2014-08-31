@@ -29,6 +29,7 @@ import os.path
 import logging
 import sys
 import re
+import shutil
 
 from ganeti import constants
 from ganeti import errors # pylint: disable=W0611
@@ -121,6 +122,13 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
 
+  @classmethod
+  def _InstanceMigrationWorkDir(cls, instance_name):
+    """Return the migration work dir path for an instance.
+
+    """
+    return utils.PathJoin(cls._ROOT_DIR, instance_name + ".checkpoint")
+
   def _EnsureDirectoryExistence(self):
     """Ensures all the directories needed for LXC use exist.
 
@@ -182,6 +190,19 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     return subsys_dir
 
+  @classmethod
+  def _CleanupMigrationWorkDir(cls, instance_name):
+    """Remove instance migration work dir if exists.
+
+    """
+    mig_work_dir = cls._InstanceMigrationWorkDir(instance_name)
+    try:
+      shutil.rmtree(mig_work_dir)
+    except OSError, err:
+      if err.errno != errno.ENOENT:
+        raise HypervisorError("Can't cleanup dir %s: %s" %
+                              (mig_work_dir, err))
+
   def _CleanupInstance(self, instance_name, stash):
     """Actual implementation of the instance cleanup procedure.
 
@@ -198,7 +219,10 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     except errors.CommandError, err:
       raise HypervisorError("Failed to cleanup partition mapping : %s" % err)
 
+    # Remove instance stash file
     utils.RemoveFile(self._InstanceStashFilePath(instance_name))
+    # Remove instance migration work dir(if exists)
+    self._CleanupMigrationWorkDir(instance_name)
 
   def CleanupInstance(self, instance_name):
     """Cleanup after a stopped instance.
@@ -450,11 +474,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     out.append("lxc.utsname = %s" % instance.name)
 
     # separate pseudo-TTY instances
-    out.append("lxc.pts = 255")
     # standard TTYs
     lxc_ttys = instance.hvparams[constants.HV_LXC_TTY]
     if lxc_ttys: # if it is the number greater than 0
       out.append("lxc.tty = %s" % lxc_ttys)
+      out.append("lxc.pts = 255")
+
     # console log file
     console_log = utils.PathJoin(self._ROOT_DIR, instance.name + ".console")
     try:
@@ -636,11 +661,8 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                             " lxc process exited after being daemonized" %
                             instance.name)
 
-  def StartInstance(self, instance, block_devices, startup_paused):
-    """Start an instance.
-
-    For LXC, we try to mount the block device and execute 'lxc-start'.
-    We use volatile containers.
+  def _ExecInstance(self, instance, rootfs_path, exec_fn):
+    """Prepare desired environment for an instance and execute the callback.
 
     """
     stash = {}
@@ -666,23 +688,17 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                      (log_file, instance.name, err))
 
     try:
-      if not block_devices:
-        raise HypervisorError("LXC needs at least one disk")
-
-      sda_dev_path = block_devices[0][1]
+      stash["rootfs_path"] = rootfs_path
       # LXC needs to use partition mapping devices to access each partition
       # of the storage
-      sda_dev_path = self._PrepareInstanceRootFsBdev(sda_dev_path, stash)
-      conf_file = self._InstanceConfFilePath(instance.name)
-      conf = self._CreateConfigFile(instance, sda_dev_path)
-      utils.WriteFile(conf_file, data=conf)
+      rootfs_path = self._PrepareInstanceRootFsBdev(rootfs_path, stash)
 
       logging.info("Starting LXC container")
       try:
-        self._SpawnLXC(instance, log_file, conf_file)
+        exec_fn(instance, log_file, self._InstanceConfFilePath(instance.name))
       except:
         logging.error("Failed to start instance %s. Please take a look at %s to"
-                      " see LXC errors.", instance.name, log_file)
+                      " see LXC errors.", instance.name, log_file)a
         raise
     except:
       # Save the original error
@@ -695,6 +711,25 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       raise exc_info[0], exc_info[1], exc_info[2]
 
     self._SaveInstanceStash(instance.name, stash)
+
+  def StartInstance(self, instance, block_devices, startup_paused):
+    """Start an instance.
+
+    For LXC, we try to mount the block device and execute 'lxc-start'.
+    We use volatile containers.
+
+    """
+    if not block_devices:
+      raise HypervisorError("LXC needs at least one disk")
+
+    conf_file = self._InstanceConfFilePath(instance.name)
+    conf = self._CreateConfigFile(instance, sda_dev_path)
+    try:
+      utils.WriteFile(conf_file, data=conf)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to write instance conf file %s: %s" %
+                            (conf_flie, err))
+    self._ExecInstance(instance, block_devices[0][1], self._SpawnLXC)
 
   def StopInstance(self, instance, force=False, retry=False, name=None,
                    timeout=None):
@@ -893,6 +928,60 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """
     cls.LinuxPowercycle()
 
+  @classmethod
+  def _TransferDirectory(cls, dir_path, dest_address):
+    """TODO
+
+    """
+    dir_path = dir_path.rstrip("/")
+    dest_path = "%s:%s" % (dest_address, dir_path)
+    result = utils.RunCmd(["rsync", "-a", "-e", "ssh", dir_path, dest_path])
+    if result.failed:
+      raise HypervisorError("Can't transfer directory %s to host %s" %
+                            (dir_path, dest_address))
+
+  @classmethod
+  def _CheckpointContainer(cls, instance, stop=True):
+    checkpoint_dir = cls._InstanceMigrationWorkDir(instance.name)
+    utils.EnsureDirs([(checkpoint_dir, constants.SECURE_DIR_MODE)])
+
+    checkpoint_cmd = [
+      "lxc-checkpoint",
+      "--verbose",
+      "-s",                         # Stop the container after checkpointed
+      "-n", instance.name,
+      "-D", checkpoint_dir,
+      "-f", self._InstanceConfFilePath(instance.name),
+      ]
+
+    result = utils.RunCmd(checkpoint_cmd)
+    if result.failed:
+      raise HypervisorError("Failed checkpointing instance %s: %s" %
+                            (instance.name, result.output))
+
+    return checkpoint_dir
+
+  @classmethod
+  def _RestoreContainer(cls, instance, log_file, conf_file):
+    """Restore a container.
+
+    """
+    checkpoint_dir = cls._InstanceMigrationWorkDir(instance.name)
+    restore_cmd = [
+      "lxc-checkpoint",
+      "-r",               # Do restore
+      "--verbose",
+      "-d",               # Daemonize
+      "-n", instance.name,
+      "-D", checkpoint_dir,
+      "-f", conf_file
+      ]
+
+    result = utils.RunCmd(restore_cmd)
+    if result.failed:
+      raise HypervisorError("Failed to restoring instance %s: %s" %
+                            (instance.name, result.output))
+
   def MigrateInstance(self, cluster_name, instance, target, live):
     """Migrate an instance.
 
@@ -906,7 +995,80 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     @param live: whether to do a live or non-live migration
 
     """
-    raise HypervisorError("Migration is not supported by the LXC hypervisor")
+    if live:
+      raise HypervisorError("Live migration is not supported by the LXC hypervisor")
+
+    # The migration of the LXC container is completely experimental feature
+    # and it should not be used unless the user explicitly know what they are
+    # trying to do.
+    if False and not instance.hvparams[constants.HV_LXC_USE_EXPERIMENTAL_FEATURE]:
+      raise HypervisorError("Migration of LXC container is an experimental"
+                            " feature and should not be used in production."
+                            " Please set the lxc_use_experimental_feature"
+                            " hvparam if you really want to do this.")
+
+    checkpoint_dir = self._CheckpointContainer(instance)
+    # Transfer the dumped image directory to the destination host
+    self._TransferDirectory(checkpoint_dir, target)
+
+  def MigrationInfo(self, instance):
+    """Get instance information to perform a migration.
+
+    @type instance: L{objects.Instance}
+    @param instance: instance to be migrated
+    @rtype: string
+    @return: lxc runtime information
+
+    """
+    info = self._LoadInstanceStash(instance.name)
+    conf_file = self._InstanceConfFilePath(instance.name)
+    try:
+      info["config"] = utils.ReadFile(conf_file)
+    except EnvironmentError, err:
+      raise HypervisorError("Can't read instance config file %s: %s" %
+                            (conf_file, err))
+
+    return info
+
+  def FinalizeMigrationDst(self, instance, info, success):
+    """Finalize the instance migration on the target node.
+
+    Stop the incoming mode KVM.
+
+    @type instance: L{objects.Instance}
+    @param instance: instance whose migration is being finalized
+
+    """
+    if success:
+      conf_file = self._InstanceConfFilePath(instance.name)
+      try:
+        utils.WriteFile(conf_file, data=info["config"])
+      except EnvironmentError, err:
+        raise HypervisorError("Failed to write instance conf file %s: %s" %
+                              (conf_flie, err))
+      self._ExecInstance(instance, info["rootfs_path"], self._RestoreContainer)
+      self._CleanupMigrationWorkDir(instance.name)
+    else:
+      self.StopInstance(instance, force=True)
+      self.CleanupInstance(instance.name)
+
+  def FinalizeMigrationSource(self, instance, success, live):
+    """Finalize the instance migration on the source node.
+
+    @type instance: L{objects.Instance}
+    @param instance: the instance that was migrated
+    @type success: bool
+    @param success: whether the migration succeeded or not
+    @type live: bool
+    @param live: whether the user requested a live migration or not
+
+    """
+    if success:
+      self.ClearnupInstance(instance.name)
+    else:
+      log_file = self._InstanceLogFilePath(instance)
+      conf_file = self._InstanceConfFilePath(instance.name)
+      self._RestoreContainer(instance, log_file, conf_file)
 
   def GetMigrationStatus(self, instance):
     """Get the migration status
@@ -919,4 +1081,4 @@ class LXCHypervisor(hv_base.BaseHypervisor):
              progress info that can be retrieved from the hypervisor
 
     """
-    raise HypervisorError("Migration is not supported by the LXC hypervisor")
+    return objects.MigrationStatus(status=constants.HV_MIGRATION_COMPLETED)
