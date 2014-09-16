@@ -108,7 +108,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     """Return the configuration file for an instance.
 
     """
-    return utils.PathJoin(cls._ROOT_DIR, instance_name + ".conf")
+    return utils.PathJoin(cls._InstanceDir(instance_name), "config")
 
   @classmethod
   def _InstanceLogFilePath(cls, instance):
@@ -121,6 +121,13 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return utils.PathJoin(cls._LOG_DIR, filename)
 
   @classmethod
+  def _InstanceConsoleLogFilePath(cls, instance_name):
+    """Return the console log file path for an instance.
+
+    """
+    return utils.PathJoin(cls._InstanceDir(instance_name), "console.log")
+
+  @classmethod
   def _InstanceStashFilePath(cls, instance_name):
     """Return the stash file path for an instance.
 
@@ -128,7 +135,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     destruction of the instance.
 
     """
-    return utils.PathJoin(cls._ROOT_DIR, instance_name + ".stash")
+    return utils.PathJoin(cls._InstanceDir(instance_name), "stash")
 
   def _EnsureDirectoryExistence(self):
     """Ensures all the directories needed for LXC use exist.
@@ -478,9 +485,9 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     if lxc_ttys: # if it is the number greater than 0
       out.append("lxc.tty = %s" % lxc_ttys)
     # console log file
-    console_log = utils.PathJoin(self._ROOT_DIR, instance.name + ".console")
-    self._CreateBlankFile(console_log, constants.SECURE_FILE_MODE)
-    out.append("lxc.console = %s" % console_log)
+    console_log_path = self._InstanceConsoleLogFilePath(instance.name)
+    self._CreateBlankFile(console_log_path, constants.SECURE_FILE_MODE)
+    out.append("lxc.console = %s" % console_log_path)
 
     # root FS
     out.append("lxc.rootfs = %s" % sda_dev_path)
