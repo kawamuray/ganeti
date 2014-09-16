@@ -139,6 +139,19 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       (self._LOG_DIR, 0750),
       ])
 
+  @classmethod
+  def _CreateBlankFile(cls, path, mode):
+    """Create blank file.
+
+    Create a blank file for a path with specified mode.
+    An existing file will be overwritten.
+
+    """
+    try:
+      utils.WriteFile(path, data="", mode=mode)
+    except EnvironmentError, err:
+      raise HypervisorError("Failed to create file %s: %s" % (path, err))
+
   def _SaveInstanceStash(self, instance_name, data):
     """Save data to the instance stash file in serialized format.
 
@@ -466,12 +479,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       out.append("lxc.tty = %s" % lxc_ttys)
     # console log file
     console_log = utils.PathJoin(self._ROOT_DIR, instance.name + ".console")
-    try:
-      utils.WriteFile(console_log, data="", mode=constants.SECURE_FILE_MODE)
-    except EnvironmentError, err:
-      raise errors.HypervisorError("Creating console log file %s for"
-                                   " instance %s failed: %s" %
-                                   (console_log, instance.name, err))
+    self._CreateBlankFile(console_log, constants.SECURE_FILE_MODE)
     out.append("lxc.console = %s" % console_log)
 
     # root FS
@@ -667,12 +675,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
 
     log_file = self._InstanceLogFilePath(instance)
     if not os.path.exists(log_file):
-      try:
-        utils.WriteFile(log_file, data="", mode=constants.SECURE_FILE_MODE)
-      except EnvironmentError, err:
-        raise errors.HypervisorError("Creating hypervisor log file %s for"
-                                     " instance %s failed: %s" %
-                                     (log_file, instance.name, err))
+      self._CreateBlankFile(log_file, constants.SECURE_FILE_MODE)
 
     try:
       if not block_devices:
