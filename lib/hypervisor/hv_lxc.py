@@ -828,6 +828,20 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     return tuple(map(int, match.groups())) if match else None
 
   @classmethod
+  def _GetLXCVersion(cls, from_cmd="lxc-start"):
+    """Return the LXC version currently used in system.
+
+    Version information will retrieved by command specified by from_cmd.
+
+    """
+    result = utils.RunCmd(from_cmd)
+    if result.failed:
+      raise HypervisorError("Failed to get version info from command %s: %s" %
+                            (from_cmd, result.output))
+
+    return result.stdout.strip()
+
+  @classmethod
   def _VerifyLXCCommands(cls):
     """Verify the validity of lxc command line tools.
 
@@ -851,21 +865,21 @@ class LXCHypervisor(hv_base.BaseHypervisor):
             msgs.append("The python version of 'lxc-ls' is required."
                         " Maybe lxc was installed without --enable-python")
         else:
-          result = utils.RunCmd([cmd, "--version"])
-          if result.failed:
-            msgs.append("Can't get version info from %s: %s" %
-                        (cmd, result.output))
+          try:
+            version_string = cls._GetLXCVersion(from_cmd=cmd)
+          except HypervisorError, err:
+            msgs.append(str(err))
+            continue
+
+          version = cls._ParseLXCVersion(version_string)
+          if version:
+            if version < version_required:
+              msgs.append("LXC version >= %s is required but command %s has"
+                          " version %s" %
+                          (cls._LXC_MIN_VERSION_REQUIRED, cmd, version_string))
           else:
-            version_str = result.stdout.strip()
-            version = cls._ParseLXCVersion(version_str)
-            if version:
-              if version < version_required:
-                msgs.append("LXC version >= %s is required but command %s has"
-                            " version %s" %
-                            (cls._LXC_MIN_VERSION_REQUIRED, cmd, version_str))
-            else:
-              msgs.append("Can't parse version info from %s output: %s" %
-                          (cmd, version_str))
+            msgs.append("Can't parse version info from %s output: %s" %
+                        (cmd, version_str))
       except errors.OpExecError:
         msgs.append("Required command %s not found" % cmd)
 
