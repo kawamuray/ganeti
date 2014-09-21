@@ -49,6 +49,39 @@ from ganeti.hypervisor import hv_base
 from ganeti.errors import HypervisorError
 
 
+class LXCVersion(tuple): # pylint: disable=R0924
+  """LXC version class.
+
+  """
+  # Let beta version following micro version, but don't care about it
+  _VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
+
+  @classmethod
+  def _Parse(cls, version_string):
+    """Parse a passed string as a LXC version string.
+
+    @param version_string: a valid LXC version string
+    @type version_string: string
+    @raise ValueError: if version_string is a invalid LXC version string
+    @rtype tuple(int, int, int)
+    @return (major_num, minor_num, micro_num)
+
+    """
+    match = cls._VERSION_RE.match(version_string)
+    if match:
+      return tuple(map(int, match.groups()))
+    else:
+      raise ValueError("'%s' is not valid LXC version string" % version_string)
+
+  def __new__(cls, version_string):
+    version = super(LXCVersion, cls).__new__(cls, cls._Parse(version_string))
+    version.original_string = version_string
+    return version
+
+  def __str__(self):
+    return self.original_string
+
+
 class LXCHypervisor(hv_base.BaseHypervisor):
   """LXC-based virtualization.
 
@@ -59,7 +92,7 @@ class LXCHypervisor(hv_base.BaseHypervisor):
   _PROC_CGROUPS_FILE = "/proc/cgroups"
   _PROC_SELF_CGROUP_FILE = "/proc/self/cgroup"
 
-  _LXC_MIN_VERSION_REQUIRED = "1.0.0"
+  _LXC_MIN_VERSION_REQUIRED = LXCVersion("1.0.0")
   _LXC_COMMANDS_REQUIRED = [
     "lxc-console",
     "lxc-ls",
@@ -82,8 +115,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
     constants.HV_LXC_STARTUP_WAIT: hv_base.OPT_NONNEGATIVE_INT_CHECK,
     }
 
-  # Let beta version following micro version, but don't care about it
-  _LXC_VERSION_RE = re.compile(r"^(\d+)\.(\d+)\.(\d+)")
   _REBOOT_TIMEOUT = 120 # secs
   _REQUIRED_CGROUP_SUBSYSTEMS = [
     "cpuset",
@@ -486,12 +517,12 @@ class LXCHypervisor(hv_base.BaseHypervisor):
       out.append("lxc.tty = %s" % lxc_ttys)
 
     # console log file
-    lxc_version = self._GetLXCVersion()
     # Since the following patch has applied, we lost the console log file output
     # until the lxc.console.logfile parameter supported in 1.10.0.
     # https://
     # lists.linuxcontainers.org/pipermail/lxc-devel/2014-March/008470.html
-    if self._ParseLXCVersion(lxc_version) >= self._ParseLXCVersion("1.10.0"):
+    lxc_version = self._GetLXCVersion()
+    if lxc_version >= LXCVersion("1.10.0"):
       console_log_path = self._InstanceConsoleLogFilePath(instance.name)
       self._CreateBlankFile(console_log_path, constants.SECURE_FILE_MODE)
       out.append("lxc.console.logfile = %s" % console_log_path)
@@ -827,29 +858,21 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                                    command=["lxc-console", "-n", instance.name])
 
   @classmethod
-  def _ParseLXCVersion(cls, version_string):
-    """Return a parsed result of lxc version string.
-
-    @return: tuple of major, minor and micro version number
-    @rtype: tuple(int, int, int)
-
-    """
-    match = cls._LXC_VERSION_RE.match(version_string)
-    return tuple(map(int, match.groups())) if match else None
-
-  @classmethod
   def _GetLXCVersion(cls, from_cmd="lxc-start"):
     """Return the LXC version currently used in system.
 
     Version information will retrieved by command specified by from_cmd.
 
     """
-    result = utils.RunCmd(from_cmd)
+    result = utils.RunCmd([from_cmd, "--version"])
     if result.failed:
       raise HypervisorError("Failed to get version info from command %s: %s" %
                             (from_cmd, result.output))
 
-    return result.stdout.strip()
+    try:
+      return LXCVersion(result.stdout.strip())
+    except ValueError, err:
+      raise HypervisorError("Can't parse LXC version: %s" % err)
 
   @classmethod
   def _VerifyLXCCommands(cls):
@@ -860,7 +883,6 @@ class LXCHypervisor(hv_base.BaseHypervisor):
              there is no problem.
 
     """
-    version_required = cls._ParseLXCVersion(cls._LXC_MIN_VERSION_REQUIRED)
     msgs = []
     for cmd in cls._LXC_COMMANDS_REQUIRED:
       try:
@@ -876,20 +898,19 @@ class LXCHypervisor(hv_base.BaseHypervisor):
                         " Maybe lxc was installed without --enable-python")
         else:
           try:
-            version_string = cls._GetLXCVersion(from_cmd=cmd)
+            version = cls._GetLXCVersion(from_cmd=cmd)
           except HypervisorError, err:
             msgs.append(str(err))
             continue
 
-          version = cls._ParseLXCVersion(version_string)
           if version:
-            if version < version_required:
+            if version < cls._LXC_MIN_VERSION_REQUIRED:
               msgs.append("LXC version >= %s is required but command %s has"
                           " version %s" %
-                          (cls._LXC_MIN_VERSION_REQUIRED, cmd, version_string))
+                          (cls._LXC_MIN_VERSION_REQUIRED, cmd, version))
           else:
             msgs.append("Can't parse version info from %s output: %s" %
-                        (cmd, version_str))
+                        (cmd, version))
       except errors.OpExecError:
         msgs.append("Required command %s not found" % cmd)
 
